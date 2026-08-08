@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart-Four</title>
+  </head>
+  <body>
+    <div id="app">
+      <header id="topbar">
+        <h1>Smart-Four</h1>
+        <div id="status" class="status">—</div>
+      </header>
+      <div id="scene-container"></div>
+      <aside id="panel">
+        <section class="panel-section">
+          <h2>Pieces</h2>
+          <div class="stat-row"><span class="dot dot-white"></span><span>White</span><span id="white-count" class="count">32</span></div>
+          <div class="stat-row"><span class="dot dot-black"></span><span>Black</span><span id="black-count" class="count">32</span></div>
+          <div class="stat-row"><span>Last move</span><span id="last-move" class="count">—</span></div>
+        </section>
+        <section class="panel-section">
+          <h2>Actions</h2>
+          <div class="btn-row">
+            <button id="revert-btn" disabled>Revert</button>
+            <button id="new-game-btn">New Game</button>
+          </div>
+        </section>
+        <section class="panel-section">
+          <h2>Game setup <span class="hint">(applies on New Game)</span></h2>
+          <label class="field">
+            <span>Opponent</span>
+            <select id="mode-select">
+              <option value="machine" selected>Machine</option>
+              <option value="person">Person</option>
+            </select>
+          </label>
+          <label class="field" id="color-field">
+            <span>You play</span>
+            <select id="color-select">
+              <option value="white" selected>White (first)</option>
+              <option value="black">Black</option>
+            </select>
+          </label>
+          <label class="field checkbox-field">
+            <input type="checkbox" id="think-disable" />
+            <span>Disable search (policy only)</span>
+          </label>
+          <label class="field">
+            <span>Think effort <span id="effort-value">100</span></span>
+            <input type="range" id="effort-range" min="0" max="2000" step="10" value="100" />
+          </label>
+        </section>
+      </aside>
+      <footer id="hintbar">Click a column to place a piece &middot; drag to rotate &middot; scroll to zoom</footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
