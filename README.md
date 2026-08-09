@@ -23,7 +23,7 @@ Quick steps to train the model:
 ```sh
 cd model
 python3 -m venv .venv
-.venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu
+.venv/bin/pip install -r requirements.txt
 .venv/bin/python -m smartfour.train --config config.toml --iterations 10
 ```
 

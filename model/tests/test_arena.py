@@ -105,6 +105,15 @@ def test_arena_counts_colors_correctly(monkeypatch):
     assert (a_wins, b_wins, draws) == (0, 0, 4)
 
 
+def test_play_arena_progress_callback():
+    torch.manual_seed(17)
+    a = RandomNet(seed=18)
+    b = RandomNet(seed=19)
+    calls = []
+    play_arena(a, b, cfg(), games=3, eval_simulations=5, progress=lambda: calls.append(1))
+    assert sum(calls) == 3  # called once per game
+
+
 def test_deterministic_with_seed():
     torch.manual_seed(11)
     a = RandomNet(seed=12)

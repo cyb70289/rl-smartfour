@@ -29,10 +29,11 @@ def _play_two(net_white, net_black, mcts_cfg, eval_simulations):
     return WHITE if state.winner == WHITE else BLACK
 
 
-def play_arena(net_a, net_b, mcts_cfg, games: int, eval_simulations: int):
+def play_arena(net_a, net_b, mcts_cfg, games: int, eval_simulations: int, progress=None):
     """Pit net_a against net_b over `games` games, alternating colors.
 
     Returns (a_wins, b_wins, draws) counted from net_a's perspective.
+    `progress`, if given, is called with no arguments after each game.
     """
     a_wins = b_wins = draws = 0
     for i in range(games):
@@ -48,6 +49,8 @@ def play_arena(net_a, net_b, mcts_cfg, games: int, eval_simulations: int):
             a_wins += 1
         else:
             b_wins += 1
+        if progress is not None:
+            progress()
     return a_wins, b_wins, draws
 
 

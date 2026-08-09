@@ -1,0 +1,8 @@
+# Smart-four model dependencies (CPU-only).
+#
+# --index-url keeps pip on the PyTorch CPU wheel index, which also mirrors
+# tqdm, so this single file installs everything without pulling the
+# multi-GB CUDA torch wheels from PyPI.
+--index-url https://download.pytorch.org/whl/cpu
+torch>=2.0
+tqdm>=4.66

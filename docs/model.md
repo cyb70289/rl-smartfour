@@ -83,6 +83,8 @@ Checkpoints live in `checkpoints/`: `latest.pt` every iteration,
 `best.pt` + `best_iter_XXXX.pt` on improvement. Each checkpoint carries the
 network weights, optimizer state, replay buffer, and iteration counter, so
 training resumes with `--resume`.
+Ctrl+C saves the current state to `latest.pt` so training can be resumed with
+`--resume`.
 
 Inference
 ---------
@@ -106,7 +108,8 @@ Running
 ```sh
 cd model
 python3 -m venv .venv
-.venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu pytest
+.venv/bin/pip install -r requirements.txt   # torch (CPU) + tqdm
+.venv/bin/pip install pytest                # dev only: run the test suite
 
 .venv/bin/python -m pytest tests/        # full TDD suite (300+ tests)
 

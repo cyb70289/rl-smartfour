@@ -6,16 +6,37 @@ arena. Checkpoints carry net + optimizer + buffer state for resume.
 """
 
 import argparse
+import sys
+import time
 from dataclasses import asdict
 from pathlib import Path
 
 import torch
+from tqdm import tqdm
 
 from .arena import play_arena
 from .config import Config, load_config
 from .encode import apply_d4, apply_d4_policy, d4_perms
 from .network import ResNet, loss_fn
 from .selfplay import play_game
+
+
+def _tqdm(*args, **kwargs):
+    """Progress bar that renders even when the terminal window size is unknown.
+
+    tqdm >= 4.69 derives ncols/nrows from the terminal size minus one; a pty
+    without a window size (CI, some tmux/ssh setups) then reports (-1, -1),
+    which makes tqdm skip rendering the bar entirely. Normalize degenerate
+    sizes to None so the bar falls back to default formatting.
+    """
+    kwargs.setdefault("disable", None)  # render only on a TTY
+    bar = tqdm(*args, **kwargs)
+    ncols = getattr(bar, "ncols", None)
+    nrows = getattr(bar, "nrows", None)
+    if (ncols is not None and ncols < 0) or (nrows is not None and nrows < 0):
+        bar.ncols = None
+        bar.nrows = None
+    return bar
 
 
 class ReplayBuffer:
@@ -83,31 +104,42 @@ class Trainer:
 
     def _selfplay(self, net, games: int | None = None) -> None:
         games = games if games is not None else self.cfg.training.selfplay_games
-        for _ in range(games):
-            samples, _winner = play_game(
-                net, self.cfg.mcts, self.cfg.mcts.temperature_threshold
-            )
-            self.buffer.push(samples)
+        with _tqdm(total=games, desc="self-play", unit="game", leave=False) as bar:
+            for _ in range(games):
+                samples, _winner = play_game(
+                    net, self.cfg.mcts, self.cfg.mcts.temperature_threshold
+                )
+                self.buffer.push(samples)
+                bar.set_postfix(buffer=len(self.buffer))
+                bar.update(1)
 
     def _optimize(self) -> float:
         losses = []
         n_batches = max(1, len(self.buffer) // self.cfg.training.batch_size)
-        for _ in range(self.cfg.training.train_epochs):
-            for _ in range(n_batches):
-                s, pi, z = self.buffer.sample(
-                    self.cfg.training.batch_size,
-                    augment=self.cfg.training.symmetry_augment,
-                )
-                logits, value = self.net(s)
-                loss = loss_fn(logits, value, pi, z)
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-                losses.append(loss.item())
+        total = n_batches * self.cfg.training.train_epochs
+        with _tqdm(total=total, desc="optimize", unit="batch", leave=False) as bar:
+            for _ in range(self.cfg.training.train_epochs):
+                for _ in range(n_batches):
+                    s, pi, z = self.buffer.sample(
+                        self.cfg.training.batch_size,
+                        augment=self.cfg.training.symmetry_augment,
+                    )
+                    logits, value = self.net(s)
+                    loss = loss_fn(logits, value, pi, z)
+                    self.optimizer.zero_grad()
+                    loss.backward()
+                    self.optimizer.step()
+                    losses.append(loss.item())
+                    recent = losses[-50:]
+                    bar.set_postfix(loss=f"{sum(recent) / len(recent):.4f}")
+                    bar.update(1)
         return sum(losses) / len(losses) if losses else float("nan")
 
     def _arena(self, net_a, net_b, games: int, eval_simulations: int):
-        return play_arena(net_a, net_b, self.cfg.mcts, games, eval_simulations)
+        with _tqdm(total=games, desc="arena", unit="game", leave=False) as bar:
+            return play_arena(
+                net_a, net_b, self.cfg.mcts, games, eval_simulations, progress=bar.update
+            )
 
     def _maybe_update_best(self) -> dict:
         games = self.cfg.training.eval_games
@@ -165,8 +197,21 @@ class Trainer:
 
     def train(self, iterations: int) -> list:
         stats = []
-        for _ in range(iterations):
-            stats.append(self.train_iteration())
+        with _tqdm(total=iterations, desc="iterations", unit="iter") as bar:
+            for _ in range(iterations):
+                t0 = time.perf_counter()
+                stats.append(self.train_iteration())
+                s = stats[-1]
+                s["elapsed"] = time.perf_counter() - t0
+                bar.update(1)
+                tqdm.write(
+                    f"iter {s['iteration']:3d}  loss {s['loss_mean']:.4f}  "
+                    f"buffer {s['buffer_size']}  "
+                    f"arena {s['arena_wins']}W/{s['arena_losses']}L/{s['arena_draws']}D"
+                    f" ({s['arena_ratio']:.2f})  "
+                    f"{'BEST ' if s['improved'] else ''}"
+                    f"[{s['elapsed']:.1f}s]"
+                )
         return stats
 
 
@@ -178,7 +223,13 @@ def main(argv=None) -> None:
     args = parser.parse_args(argv)
 
     cfg = load_config(args.config)
-    trainer = Trainer(cfg)
+    try:
+        trainer = Trainer(cfg)
+    except KeyboardInterrupt:
+        # The first optimizer/network init lazily imports torch internals,
+        # which can take seconds; nothing exists to save yet.
+        print("\nInterrupted during setup — nothing to save.", file=sys.stderr)
+        raise SystemExit(130)
     if args.resume:
         latest = trainer.checkpoint_dir / "latest.pt"
         if latest.exists():
@@ -186,14 +237,38 @@ def main(argv=None) -> None:
             print(f"Resumed from iteration {trainer.iteration}")
         else:
             print("No checkpoint to resume; starting fresh")
-    for stats in trainer.train(args.iterations):
-        print(
-            f"iter {stats['iteration']:3d}  loss {stats['loss_mean']:.4f}  "
-            f"buffer {stats['buffer_size']}  "
-            f"arena {stats['arena_wins']}W/{stats['arena_losses']}L/{stats['arena_draws']}D"
-            f" ({stats['arena_ratio']:.2f})  "
-            f"{'BEST' if stats['improved'] else ''}"
-        )
+
+    n_params = sum(p.numel() for p in trainer.net.parameters())
+    print("Smart-four AlphaZero training")
+    print(f"  config      {args.config}")
+    print(f"  device      {trainer.device}")
+    print(f"  network     {cfg.network.blocks} blocks x {cfg.network.base_channels} ch"
+          f" ({n_params:,} params)")
+    print(f"  self-play   {cfg.training.selfplay_games} games, {cfg.mcts.simulations} sims/move")
+    print(f"  optimize    {cfg.training.train_epochs} epochs, batch {cfg.training.batch_size}")
+    print(f"  arena       {cfg.training.eval_games} games vs best,"
+          f" {cfg.training.eval_simulations} sims/move")
+    print(f"  checkpoint  {trainer.checkpoint_dir}/")
+
+    t_start = time.perf_counter()
+    try:
+        stats = trainer.train(args.iterations)
+    except KeyboardInterrupt:
+        tqdm.write("\nTraining interrupted, saving current state...")
+        trainer.save_checkpoint(trainer.checkpoint_dir / "latest.pt")
+        tqdm.write(f"Saved {trainer.checkpoint_dir}/latest.pt, resume with --resume")
+        raise SystemExit(130)
+    total = time.perf_counter() - t_start
+
+    best_iter = max((s["iteration"] for s in stats if s["improved"]), default=None)
+    n = max(1, len(stats))
+    print(f"\nTraining complete: {len(stats)} iteration(s) in {total:.1f}s"
+          f" ({total / n:.1f}s/iter)")
+    if best_iter:
+        print(f"Best model updated at iteration {best_iter} ->"
+              f" {trainer.checkpoint_dir}/best.pt")
+    else:
+        print(f"Best model unchanged -> {trainer.checkpoint_dir}/best.pt")
 
 
 if __name__ == "__main__":
