@@ -92,6 +92,15 @@ interchange format (`game.state_to_json`): `grid[x][z][y]` with 0/1/null,
 `pieces_left`, `current`, `winner`. `simulations=0` is policy-only (no
 search), which is what the UI's "disable search" mode uses.
 
+`smartfour/worker.py` — the persistent bridge worker for the UI. It loads the
+checkpoint once, prints `{"ready": true, ...}`, then serves one request per
+line on stdin/stdout as newline-delimited JSON: requests are
+`{"id": n, "state": <state_to_json>, "simulations": m}`, responses are
+`{"id": n, "move": {"x", "z"}}` (or `{"move": null}` on a terminal state);
+errors are reported in-band as `{"id": n, "error": "..."}` and the loop keeps
+serving. The Vite plugin in `ui/plugins/` spawns it and exposes
+`POST /api/think` to the browser.
+
 Running
 -------
 ```sh

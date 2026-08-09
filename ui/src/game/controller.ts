@@ -65,7 +65,15 @@ export class GameController {
       (move) => {
         if (gen !== this.generation) return;
         if (this.state.machineThinking && this.state.winner === null) {
-          this.setState(reduce(this.state, { type: 'machine-move', move }));
+          try {
+            this.setState(reduce(this.state, { type: 'machine-move', move }));
+          } catch (err) {
+            // A broken machine (e.g. a bad model checkpoint returning an illegal
+            // move) must surface as an error and release the lock, not throw
+            // out of the promise chain and wedge the UI.
+            this.setState({ ...this.state, machineThinking: false });
+            this.onError?.(err);
+          }
         }
       },
       (err) => {

@@ -1,6 +1,6 @@
 import './style.css';
 import { GameController } from './game/controller';
-import { RandomMachinePlayer } from './game/machine';
+import { ModelMachinePlayer } from './game/machine';
 import { GameScene } from './ui/scene';
 import { Hud } from './ui/hud';
 import type { GameConfig } from './game/engine';
@@ -21,7 +21,7 @@ function canHumanMove(s: GameState): boolean {
   return true;
 }
 
-const controller = new GameController(new RandomMachinePlayer(), initialConfig, (err) => {
+const controller = new GameController(new ModelMachinePlayer(), initialConfig, (err) => {
   hud.showError(String(err));
 });
 

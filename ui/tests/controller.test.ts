@@ -166,6 +166,19 @@ describe('GameController: machine turn orchestration', () => {
     expect(ctrl.state.machineThinking).toBe(false);
   });
 
+  it('an illegal machine move is reported via onError and releases the lock', async () => {
+    const machine = new FakeMachine();
+    const onError = vi.fn();
+    const ctrl = new GameController(machine, machineHumanWhite, onError);
+    ctrl.humanMove({ x: 2, z: 2 });
+    machine.resolveNext({ x: 9, z: 9 }); // out of bounds — must not wedge the UI
+    await flush();
+    expect(onError).toHaveBeenCalledOnce();
+    expect(onError.mock.calls[0]![0]).toBeInstanceOf(Error);
+    expect(ctrl.state.machineThinking).toBe(false);
+    expect(ctrl.state.history).toEqual([{ x: 2, z: 2, player: 'white' }]); // human move kept
+  });
+
   it('notifies subscribers on every state change', () => {
     const machine = new FakeMachine();
     const ctrl = new GameController(machine, machineHumanWhite, () => {});
