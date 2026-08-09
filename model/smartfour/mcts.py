@@ -1,11 +1,8 @@
-"""AlphaZero MCTS with batched leaf evaluation, device-aware.
+"""AlphaZero MCTS with batched leaf evaluation, CPU-friendly.
 
-Runs on the net's device by default (or an explicit `device`): encodings are
-moved to the device before each net forward, while tree bookkeeping stays in
-CPU Python. Every node stores values from its OWN perspective (the player to
-move at that node): the net evaluates the current-player encoding, priors are
-masked to legal actions, and backpropagation flips the value sign at each
-level.
+Every node stores values from its OWN perspective (the player to move at that
+node): the net evaluates the current-player encoding, priors are masked to
+legal actions, and backpropagation flips the value sign at each level.
 """
 
 import math
@@ -16,17 +13,6 @@ from .encode import action_mask, action_to_xyz, encode, legal_actions
 from .game import apply_move, is_terminal, terminal_value
 
 NEG_INF = float("-inf")
-
-
-def _infer_net_device(net) -> torch.device:
-    """Device of the net's first parameter; CPU for parameterless test doubles."""
-    params = getattr(net, "parameters", None)
-    if params is None:
-        return torch.device("cpu")
-    try:
-        return next(params()).device
-    except StopIteration:
-        return torch.device("cpu")
 
 
 class Node:
@@ -47,10 +33,10 @@ class Node:
 
 
 class MCTS:
-    def __init__(self, net, mcts_cfg: MCTSConfig, device=None):
+    def __init__(self, net, mcts_cfg: MCTSConfig, device="cpu"):
         self.net = net
         self.cfg = mcts_cfg
-        self.device = device if device is not None else _infer_net_device(net)
+        self.device = device
         if hasattr(self.net, "eval"):
             self.net.eval()
         self.last_root_policy_visits = {}
@@ -77,7 +63,7 @@ class MCTS:
         legal = legal_actions(state)
         if not legal:
             return None
-        tensor = encode(state).unsqueeze(0).to(self.device)
+        tensor = encode(state).unsqueeze(0)
         with torch.no_grad():
             logits, value = self.net(tensor)
         node = Node(state, legal)
@@ -92,7 +78,7 @@ class MCTS:
 
         def drain():
             leaves = list(pending_unique.values())
-            tensors = torch.stack([encode(leaf.state) for leaf in leaves]).to(self.device)
+            tensors = torch.stack([encode(leaf.state) for leaf in leaves])
             with torch.no_grad():
                 logits, values = self.net(tensors)
             value_of = {id(leaf): v.item() for leaf, v in zip(leaves, values)}
@@ -165,7 +151,7 @@ class MCTS:
             node.terminal = 0.0  # no legal moves: treat as a draw
             return
         masked = logits.clone()
-        mask = action_mask(node.state).to(logits.device)
+        mask = action_mask(node.state)
         masked = torch.where(mask.bool(), logits, torch.full_like(logits, NEG_INF))
         prior = torch.softmax(masked, dim=0)
         node.children = {}

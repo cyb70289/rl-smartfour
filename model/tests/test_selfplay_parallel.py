@@ -14,12 +14,10 @@ import pytest
 import torch
 
 from smartfour.config import Config, MCTSConfig, NetworkConfig, TrainingConfig, load_config
-from smartfour.device import state_to_cpu
 from smartfour.encode import action_mask, encode
 from smartfour.game import BLACK, WHITE, initial_state
 from smartfour.network import ResNet
 from smartfour.selfplay import (
-    play_game,
     samples_from_ipc,
     samples_to_ipc,
     selfplay_worker,
@@ -104,7 +102,7 @@ def test_selfplay_worker_plays_assigned_games():
     q = ctx.Queue()
     p = ctx.Process(
         target=selfplay_worker,
-        args=(state_to_cpu(net.state_dict()), net_cfg, tiny_mcts(), 12, 2, 7, "cpu", None, q),
+        args=(net.state_dict(), net_cfg, tiny_mcts(), 12, 2, 7, None, q),
     )
     p.start()
     received = []
@@ -126,7 +124,7 @@ def test_selfplay_worker_reports_failure_in_band():
     bad_state = {"nope": torch.zeros(1)}
     p = ctx.Process(
         target=selfplay_worker,
-        args=(bad_state, tiny_net_cfg(), tiny_mcts(), 12, 1, 7, "cpu", None, q),
+        args=(bad_state, tiny_net_cfg(), tiny_mcts(), 12, 1, 7, None, q),
     )
     p.start()
     msg = q.get(timeout=120)

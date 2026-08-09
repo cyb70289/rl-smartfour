@@ -19,7 +19,6 @@ from tqdm import tqdm
 
 from .arena import play_arena
 from .config import Config, load_config
-from .device import device_name, resolve_device, state_to_cpu
 from .encode import apply_d4, apply_d4_policy, d4_perms
 from .network import ResNet, loss_fn
 from .selfplay import (
@@ -93,14 +92,12 @@ class ReplayBuffer:
 
 
 class Trainer:
-    def __init__(self, cfg: Config, device=None):
+    def __init__(self, cfg: Config, device="cpu"):
         self.cfg = cfg
-        self.device = resolve_device(device)
+        self.device = device
         torch.manual_seed(cfg.training.seed)
-        if self.device.type == "cuda":
-            torch.cuda.manual_seed_all(cfg.training.seed)
-        self.net = ResNet(cfg.network).to(self.device)
-        self.best_net = ResNet(cfg.network).to(self.device)
+        self.net = ResNet(cfg.network).to(device)
+        self.best_net = ResNet(cfg.network).to(device)
         self.best_net.load_state_dict(self.net.state_dict())
         self.optimizer = torch.optim.AdamW(
             self.net.parameters(),
@@ -121,8 +118,7 @@ class Trainer:
             with _tqdm(total=games, desc="self-play", unit="game", leave=False) as bar:
                 for _ in range(games):
                     samples, _winner = play_game(
-                        net, self.cfg.mcts, self.cfg.mcts.temperature_threshold,
-                        device=self.device,
+                        net, self.cfg.mcts, self.cfg.mcts.temperature_threshold
                     )
                     self.buffer.push(samples)
                     bar.set_postfix(buffer=len(self.buffer))
@@ -138,8 +134,8 @@ class Trainer:
         """
         ctx = multiprocessing.get_context("spawn")
         out_q = ctx.Queue()
-        net_state = state_to_cpu(net.state_dict())
-        num_threads = worker_num_threads(workers) if self.device.type == "cpu" else None
+        net_state = net.state_dict()
+        num_threads = worker_num_threads(workers)
         procs = []
         try:
             for i, n in enumerate(split_games(games, workers)):
@@ -150,8 +146,7 @@ class Trainer:
                     args=(
                         net_state, self.cfg.network, self.cfg.mcts,
                         self.cfg.mcts.temperature_threshold, n,
-                        self.cfg.training.seed + i + 1, str(self.device),
-                        num_threads, out_q,
+                        self.cfg.training.seed + i + 1, num_threads, out_q,
                     ),
                 )
                 p.start()
@@ -219,7 +214,6 @@ class Trainer:
                         self.cfg.training.batch_size,
                         augment=self.cfg.training.symmetry_augment,
                     )
-                    s, pi, z = s.to(self.device), pi.to(self.device), z.to(self.device)
                     logits, value = self.net(s)
                     loss = loss_fn(logits, value, pi, z)
                     self.optimizer.zero_grad()
@@ -261,8 +255,8 @@ class Trainer:
         payload = {
             "iteration": self.iteration,
             "network": asdict(self.cfg.network),
-            "net_state": state_to_cpu(self.net.state_dict()),
-            "optimizer_state": state_to_cpu(self.optimizer.state_dict()),
+            "net_state": self.net.state_dict(),
+            "optimizer_state": self.optimizer.state_dict(),
             "buffer": self.buffer.state(),
         }
         torch.save(payload, path)
@@ -270,7 +264,7 @@ class Trainer:
             torch.save(payload, self.checkpoint_dir / f"best_iter_{self.iteration:04d}.pt")
 
     def load_checkpoint(self, path) -> None:
-        payload = torch.load(path, weights_only=False, map_location="cpu")
+        payload = torch.load(path, weights_only=False)
         self.iteration = payload["iteration"]
         self.net.load_state_dict(payload["net_state"])
         self.optimizer.load_state_dict(payload["optimizer_state"])
@@ -337,7 +331,7 @@ def main(argv=None) -> None:
     n_params = sum(p.numel() for p in trainer.net.parameters())
     print("Smart-four AlphaZero training")
     print(f"  config      {args.config}")
-    print(f"  device      {device_name(trainer.device)}")
+    print(f"  device      {trainer.device}")
     print(f"  network     {cfg.network.blocks} blocks x {cfg.network.base_channels} ch"
           f" ({n_params:,} params)")
     print(f"  self-play   {cfg.training.selfplay_games} games"

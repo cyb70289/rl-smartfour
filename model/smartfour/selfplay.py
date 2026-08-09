@@ -21,16 +21,14 @@ from .mcts import MCTS
 from .network import ResNet
 
 
-def play_game(net, mcts_cfg, temperature_threshold: int, start_state: GameState | None = None,
-              device=None):
+def play_game(net, mcts_cfg, temperature_threshold: int, start_state: GameState | None = None):
     """Play one self-play game with dirichlet noise and temperature scheduling.
 
     temperature_threshold: plies below it use tau=1 (sample from visit
-    counts), the rest use tau=0 (argmax). `device` is passed to MCTS (defaults
-    to the net's device).
+    counts), the rest use tau=0 (argmax).
     """
     state = start_state if start_state is not None else initial_state()
-    mcts = MCTS(net, mcts_cfg, device=device)
+    mcts = MCTS(net, mcts_cfg)
     samples = []
     while not is_terminal(state):
         ply = len(samples)
@@ -84,26 +82,26 @@ def samples_from_ipc(samples):
 
 
 def selfplay_worker(net_state, net_cfg: NetworkConfig, mcts_cfg: MCTSConfig,
-                    temperature_threshold: int, games: int, seed: int, device: str,
+                    temperature_threshold: int, games: int, seed: int,
                     num_threads, out_q) -> None:
     """Process entry point: rebuild the net, play `games` games, ship the
     samples of each game on out_q.
 
     Errors never crash the parent: they are reported as an
     ('__worker_error__', message) marker so the trainer can fail fast instead
-    of hanging on a missing game. `num_threads` (CPU only) avoids core
-    oversubscription when several workers share the machine.
+    of hanging on a missing game. `num_threads` avoids core oversubscription
+    when several workers share the machine.
     """
     try:
         torch.manual_seed(seed)
-        if device == "cpu" and num_threads:
+        if num_threads:
             torch.set_num_threads(max(1, int(num_threads)))
-        net = ResNet(net_cfg).to(device)
+        net = ResNet(net_cfg)
         net.load_state_dict(net_state)
         net.eval()
         for _ in range(games):
             samples, _winner = play_game(
-                net, mcts_cfg, temperature_threshold, device=device
+                net, mcts_cfg, temperature_threshold
             )
             out_q.put(samples_to_ipc(samples))
     except Exception as exc:  # noqa: BLE001 — must never take the parent down
@@ -111,8 +109,7 @@ def selfplay_worker(net_state, net_cfg: NetworkConfig, mcts_cfg: MCTSConfig,
 
 
 def worker_num_threads(workers: int) -> int:
-    """Per-worker torch thread count on CPU (the caller passes None on
-    accelerators, where torch picks its own concurrency).
+    """Per-worker torch thread count.
 
     Each torch process otherwise defaults to all cores, so N workers would
     oversubscribe an N-core box; divide the cores evenly instead.

@@ -21,7 +21,6 @@ import sys
 import torch
 
 from .config import MCTSConfig, NetworkConfig
-from .device import device_name, resolve_device
 from .encode import action_mask, action_to_xyz, encode
 from .game import is_terminal, state_from_json
 from .mcts import MCTS
@@ -31,11 +30,10 @@ NEG_INF = float("-inf")
 
 
 class SmartFourAgent:
-    def __init__(self, checkpoint_path: str, device=None):
-        self.device = resolve_device(device)
-        payload = torch.load(checkpoint_path, weights_only=False, map_location="cpu")
+    def __init__(self, checkpoint_path: str, device="cpu"):
+        payload = torch.load(checkpoint_path, weights_only=False)
         net_cfg = NetworkConfig(**payload.get("network", NetworkConfig().__dict__))
-        self.net = ResNet(net_cfg).to(self.device)
+        self.net = ResNet(net_cfg).to(device)
         self.net.load_state_dict(payload["net_state"])
         self.net.eval()
         self.iteration = payload.get("iteration", 0)
@@ -57,12 +55,12 @@ class SmartFourAgent:
             return None
         if simulations == 0:
             with torch.no_grad():
-                logits, _ = self.net(self._encode(state).unsqueeze(0).to(self.device))
-            mask = self._mask(state).to(logits.device)
+                logits, _ = self.net(self._encode(state).unsqueeze(0))
+            mask = self._mask(state)
             masked = torch.where(mask.bool(), logits[0], torch.full_like(logits[0], NEG_INF))
             x, z, _y = action_to_xyz(int(torch.argmax(masked)))
             return (x, z)
-        mcts = MCTS(self.net, MCTSConfig(simulations=simulations), device=self.device)
+        mcts = MCTS(self.net, MCTSConfig(simulations=simulations))
         _pi, chosen, _root = mcts.root_policy(state, root_noise=False, temperature=0.0)
         if chosen is None:
             return None
@@ -84,7 +82,6 @@ def main(argv=None) -> None:
         data = json.load(sys.stdin)
 
     agent = SmartFourAgent(args.checkpoint)
-    print(f"device: {device_name(agent.device)}", file=sys.stderr)
     move = agent.choose_move(data, simulations=args.sims)
     if move is None:
         print(json.dumps({"move": None}))
