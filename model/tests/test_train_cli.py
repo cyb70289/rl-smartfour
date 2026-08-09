@@ -31,6 +31,7 @@ def write_config(tmp_path, blocks=1, **training):
         weight_decay=0.0,
         symmetry_augment=True,
         eval_games=2,
+        arena_workers=1,  # CLI tests stay sequential
         arena_win_ratio=0.55,
         seed=0,
         checkpoint_dir=cdir,

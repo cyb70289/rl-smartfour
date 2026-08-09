@@ -15,6 +15,7 @@ from smartfour.train import ReplayBuffer, Trainer
 
 def tiny_training(**kw):
     kw.setdefault("selfplay_games", 3)
+    kw.setdefault("selfplay_workers", 1)  # unit tests stay sequential
     kw.setdefault("train_epochs", 5)
     kw.setdefault("batch_size", 8)
     kw.setdefault("replay_capacity", 10_000)
@@ -22,6 +23,7 @@ def tiny_training(**kw):
     kw.setdefault("weight_decay", 0.0)
     kw.setdefault("symmetry_augment", True)
     kw.setdefault("eval_games", 2)
+    kw.setdefault("arena_workers", 1)  # unit tests stay sequential
     kw.setdefault("arena_win_ratio", 0.55)
     kw.setdefault("seed", 0)
     return TrainingConfig(**kw)
@@ -374,4 +376,4 @@ def test_config_loads_from_toml():
     assert cfg.network.blocks == 5
     assert cfg.mcts.simulations == 200
     assert cfg.training.selfplay_games == 100
-    assert cfg.training.selfplay_workers == 1
+    assert cfg.training.selfplay_workers == 8

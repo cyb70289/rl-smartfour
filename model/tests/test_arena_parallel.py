@@ -40,7 +40,7 @@ def tiny_mcts(**kw):
 
 
 def make_config(tmp_path, **kw):
-    training = TrainingConfig(
+    defaults = dict(
         train_epochs=1,
         batch_size=16,
         replay_capacity=10_000,
@@ -48,12 +48,18 @@ def make_config(tmp_path, **kw):
         weight_decay=0.0,
         symmetry_augment=True,
         eval_games=2,
+        selfplay_workers=1,  # parallel tests override explicitly
+        arena_workers=1,
         arena_win_ratio=0.55,
         seed=0,
         checkpoint_dir=str(tmp_path),
-        **kw,
     )
-    return Config(network=tiny_net_cfg(), mcts=tiny_mcts(), training=training)
+    defaults.update(kw)
+    return Config(
+        network=tiny_net_cfg(),
+        mcts=tiny_mcts(),
+        training=TrainingConfig(**defaults),
+    )
 
 
 # ---------------------------------------------------------------- result mapping
@@ -277,7 +283,7 @@ def test_load_config_rejects_zero_arena_workers(tmp_path):
         load_config(str(p))
 
 
-def test_load_config_defaults_arena_workers_to_one(tmp_path):
+def test_load_config_defaults_arena_workers_to_eight(tmp_path):
     p = tmp_path / "cfg.toml"
     p.write_text("")
-    assert load_config(str(p)).training.arena_workers == 1
+    assert load_config(str(p)).training.arena_workers == 8

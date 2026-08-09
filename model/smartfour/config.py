@@ -28,7 +28,8 @@ class MCTSConfig:
 @dataclass(frozen=True)
 class TrainingConfig:
     selfplay_games: int = 100
-    selfplay_workers: int = 1  # parallel self-play processes (1 = sequential)
+    selfplay_workers: int = 8  # parallel self-play processes; clamped to the
+                               # CPU count at startup (1 = sequential)
     train_epochs: int = 5
     batch_size: int = 128
     replay_capacity: int = 100_000
@@ -36,8 +37,9 @@ class TrainingConfig:
     weight_decay: float = 0.0001
     symmetry_augment: bool = True
     eval_games: int = 40
-    arena_workers: int = 1  # parallel arena processes (1 = sequential); each
-                            # worker is a separate process with both net copies
+    arena_workers: int = 8  # parallel arena processes; clamped to the CPU
+                            # count at startup (1 = sequential); each worker
+                            # is a separate process with both net copies
     arena_win_ratio: float = 0.55
     checkpoint_dir: str = "checkpoints"
     seed: int = 0

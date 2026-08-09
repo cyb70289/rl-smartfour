@@ -28,7 +28,7 @@ import signal
 import sys
 import tempfile
 import time
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import torch
@@ -553,6 +553,18 @@ def main(argv=None) -> None:
         parser.error("--iterations must be >= 0")
 
     cfg = load_config(args.config)
+    # Clamp worker counts to the machine's CPU count: spawning more processes
+    # than cores only adds context-switch overhead.
+    cpus = os.cpu_count() or 1
+    if cfg.training.selfplay_workers > cpus or cfg.training.arena_workers > cpus:
+        cfg = replace(
+            cfg,
+            training=replace(
+                cfg.training,
+                selfplay_workers=min(cfg.training.selfplay_workers, cpus),
+                arena_workers=min(cfg.training.arena_workers, cpus),
+            ),
+        )
 
     if args.restart:
         _confirm_and_wipe(Path(cfg.training.checkpoint_dir), args.yes)
@@ -583,6 +595,7 @@ def main(argv=None) -> None:
     print(f"  device      {trainer.device}")
     print(f"  network     {cfg.network.blocks} blocks x {cfg.network.base_channels} ch"
           f" ({n_params:,} params)")
+    print(f"  cpus        {cpus} (worker counts capped at this)")
     print(f"  self-play   {cfg.training.selfplay_games} games"
           f" x {cfg.training.selfplay_workers} worker(s),"
           f" {cfg.mcts.simulations} sims/move")
