@@ -68,3 +68,8 @@ interface MachinePlayer {
 - `signal` — aborted when the move is no longer wanted (e.g. a new game
   started); the implementation should reject promptly on abort.
 - The move returned must be legal for `state` (the controller validates).
+
+## CREDIT
+
+- `DeepSeek-v4-Flash-0731` for all the coding and documentation.
+- `oh-my-pi` coding agent, without additional skills.
