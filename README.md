@@ -16,55 +16,33 @@ and stack up to five high; first to line up four own pieces in 3D space wins
 ## Model
 
 AlphaZero-style training and inference for smart-four (resnet policy/value +
-MCTS), all CPU. See [`docs/model.md`](docs/model.md). Setup and run:
+MCTS), all CPU. See [`docs/model.md`](docs/model.md) for full command line.
+
+Quick setup and run:
 
 ```sh
 cd model
 python3 -m venv .venv
-.venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu pytest
-.venv/bin/python -m pytest tests/            # TDD suite (rules, encode, MCTS, training)
-.venv/bin/python -m smartfour.train --config config.toml --iterations 10          # train
-.venv/bin/python -m smartfour.train --config config.toml --iterations 10 --resume # resume from checkpoints/latest.pt
+.venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu
+.venv/bin/python -m smartfour.train --config config.toml --iterations 10
 .venv/bin/python -m smartfour.infer --checkpoint checkpoints/best.pt --sims 200 --state state.json
 ```
 
-`config.toml` is the full profile (5×64 resnet, 200 MCTS sims/move,
-100 self-play games per iteration); `config_small.toml` is a reduced-size
-profile for quick proof runs. Checkpoints (`checkpoints/`) keep the network,
-optimizer, replay buffer and iteration count; the best model is tracked in
-`best.pt`. The rules implementation (`smartfour/game.py`) is a faithful port
-of the UI engine.
+## UI
 
-## Building and running the UI
+See [`docs/ui.md`](docs/ui.md) for design principals.
 
-```sh
-cd ui
-npm install
-npm run dev        # local: http://localhost:5173
-```
-
-Production build, then serve for remote access:
+Build and serve for remote access:
 
 ```sh
 cd ui
 npm run build
-npm run preview -- --host 0.0.0.0
+npm run preview -- --host 0.0.0.0 --port 8032
 ```
 
 Play against the machine (currently a random dummy) or a person on the same
 screen; you can revert the last move, pick your color, and adjust machine
 think effort (disable = policy only).
-
-## Tests
-
-```sh
-cd ui
-npm test
-```
-
-The game engine (rules, win detection, revert semantics, machine-turn
-orchestration) is unit-tested with Vitest. The model has its own pytest suite
-in `model/tests/` (game parity with the UI engine, encoding, MCTS, training).
 
 ## TODO: model integration
 
