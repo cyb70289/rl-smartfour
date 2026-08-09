@@ -11,6 +11,7 @@ and ships the samples back over a queue.
 """
 
 import os
+import signal
 
 import torch
 
@@ -81,6 +82,13 @@ def samples_from_ipc(samples):
     ]
 
 
+def ignore_sigint() -> None:
+    """Workers must not react to Ctrl-C: the parent alone decides when to stop
+    and terminates the workers explicitly. A worker that died on the
+    terminal's SIGINT would race the parent's cleanup."""
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+
+
 def selfplay_worker(net_state, net_cfg: NetworkConfig, mcts_cfg: MCTSConfig,
                     temperature_threshold: int, games: int, seed: int,
                     num_threads, out_q) -> None:
@@ -92,6 +100,7 @@ def selfplay_worker(net_state, net_cfg: NetworkConfig, mcts_cfg: MCTSConfig,
     of hanging on a missing game. `num_threads` avoids core oversubscription
     when several workers share the machine.
     """
+    ignore_sigint()
     try:
         torch.manual_seed(seed)
         if num_threads:

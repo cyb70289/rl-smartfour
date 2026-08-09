@@ -15,8 +15,8 @@ from smartfour.train import ReplayBuffer, Trainer
 
 def tiny_training(**kw):
     kw.setdefault("selfplay_games", 3)
-    kw.setdefault("train_epochs", 1)
-    kw.setdefault("batch_size", 16)
+    kw.setdefault("train_epochs", 5)
+    kw.setdefault("batch_size", 8)
     kw.setdefault("replay_capacity", 10_000)
     kw.setdefault("learning_rate", 0.001)
     kw.setdefault("weight_decay", 0.0)
@@ -144,7 +144,12 @@ def test_checkpoint_round_trip(tmp_path):
     loss.backward()
     t.optimizer.step()
     path = tmp_path / "test.pt"
-    t.save_checkpoint(path, is_best=True)
+    # Make best_net differ from the current net so the round-trip is honest.
+    with torch.no_grad():
+        for p in t.best_net.parameters():
+            p.add_(0.5)
+    t.best_iteration = 4
+    t.save_checkpoint(path, include_buffer=True)
 
     t2 = Trainer(cfg)
     t2.load_checkpoint(path)
@@ -155,15 +160,33 @@ def test_checkpoint_round_trip(tmp_path):
     assert t2.optimizer.state_dict()["state"]
     # Buffer restored.
     assert len(t2.buffer) == len(t.buffer)
+    # The arena baseline (best_net) is restored, not re-initialized to net.
+    for p1, p2 in zip(t.best_net.parameters(), t2.best_net.parameters()):
+        assert torch.equal(p1, p2)
+    assert t2.best_iteration == 4
 
 
-def test_save_best_marks_iteration_file(tmp_path):
+def test_save_best_writes_slim_snapshot(tmp_path):
+    """best.pt is an inference snapshot (best weights + iteration), not a
+    training state: no buffer, no optimizer."""
     cfg = make_config(tmp_path)
     t = Trainer(cfg)
-    t.iteration = 3
-    t.save_checkpoint(tmp_path / "best.pt", is_best=True)
-    assert (tmp_path / "best.pt").exists()
-    assert (tmp_path / "best_iter_0003.pt").exists()
+    t.iteration = 5
+    t.best_iteration = 4
+    with torch.no_grad():
+        for p in t.best_net.parameters():
+            p.add_(1.0)  # best differs from the current net
+    t.save_best()
+    payload = torch.load(tmp_path / "best.pt", weights_only=False)
+    assert payload["iteration"] == 4
+    assert "net_state" in payload
+    assert "buffer" not in payload
+    assert "optimizer_state" not in payload
+    # best.pt carries the best net's weights, not the current net's.
+    t2 = Trainer(cfg)
+    t2.best_net.load_state_dict(payload["net_state"])
+    for p1, p2 in zip(t.best_net.parameters(), t2.best_net.parameters()):
+        assert torch.equal(p1, p2)
 
 
 # ---------------------------------------------------------------- best-model selection
@@ -176,12 +199,17 @@ def test_best_replaced_only_above_ratio(tmp_path, monkeypatch):
         return (2, 0, 0)  # candidate wins 2 of 2 -> ratio 1.0
 
     monkeypatch.setattr(t, "_arena", fake_arena)
-    t._maybe_update_best()
+    t._maybe_update_best(1)
     assert (tmp_path / "best.pt").exists()
-    # The best checkpoint holds the candidate's weights (iter 1).
+    assert t.best_iteration == 1
+    # best.pt holds the candidate's weights (the net that won the arena).
+    payload = torch.load(tmp_path / "best.pt", weights_only=False)
     t2 = Trainer(cfg)
-    t2.load_checkpoint(tmp_path / "best.pt")
-    for p1, p2 in zip(t.net.parameters(), t2.net.parameters()):
+    t2.best_net.load_state_dict(payload["net_state"])
+    for p1, p2 in zip(t.net.parameters(), t2.best_net.parameters()):
+        assert torch.equal(p1, p2)
+    # the trainer's own arena baseline is the candidate too
+    for p1, p2 in zip(t.net.parameters(), t.best_net.parameters()):
         assert torch.equal(p1, p2)
 
 
@@ -193,9 +221,10 @@ def test_best_not_replaced_when_losing(tmp_path, monkeypatch):
         return (0, 2, 0)  # candidate loses
 
     monkeypatch.setattr(t, "_arena", fake_arena)
-    t._maybe_update_best()
+    t._maybe_update_best(1)
     # Candidate lost: no best checkpoint is written (nothing improved yet).
     assert not (tmp_path / "best.pt").exists()
+    assert t.best_iteration == 0
 
 
 # ---------------------------------------------------------------- training loop
@@ -241,6 +270,101 @@ def test_resume_continues_iteration(tmp_path):
     assert t2.iteration == 1
     stats = t2.train_iteration()
     assert stats["iteration"] == 2
+
+
+# ---------------------------------------------------------------- per-iteration checkpoints
+
+def test_every_iteration_writes_iter_and_latest(tmp_path):
+    cfg = make_config(tmp_path, eval_games=2)
+    t = Trainer(cfg)
+    t.train_iteration()
+    t.train_iteration()
+    assert (tmp_path / "iter_0001.pt").exists()
+    assert (tmp_path / "iter_0002.pt").exists()
+    iter_payload = torch.load(tmp_path / "iter_0002.pt", weights_only=False)
+    assert iter_payload["iteration"] == 2
+    assert "best_net_state" in iter_payload
+    assert "buffer" not in iter_payload  # iter files are light snapshots
+    latest = torch.load(tmp_path / "latest.pt", weights_only=False)
+    assert latest["iteration"] == 2
+    assert "buffer" in latest  # latest is the exact resume anchor
+    assert len(latest["buffer"][0]) == len(t.buffer)
+
+
+def test_iteration_counter_advances_only_on_completion(tmp_path, monkeypatch):
+    cfg = make_config(tmp_path)
+    t = Trainer(cfg)
+    t.train_iteration()
+    assert t.iteration == 1
+
+    def boom(net):
+        raise KeyboardInterrupt
+
+    # instance attribute: plain function, no implicit self
+    monkeypatch.setattr(t, "_selfplay", boom)
+    with pytest.raises(KeyboardInterrupt):
+        t.train_iteration()
+    assert t.iteration == 1  # the interrupted iteration is never counted
+    # the interrupt handler's save therefore carries the last completed one
+    t.save_checkpoint(tmp_path / "latest.pt", include_buffer=True)
+    assert torch.load(tmp_path / "latest.pt", weights_only=False)["iteration"] == 1
+
+
+def test_train_stops_at_target(tmp_path):
+    cfg = make_config(tmp_path, eval_games=2)
+    t = Trainer(cfg)
+    t.iteration = 2
+    stats = t.train(4)
+    assert [s["iteration"] for s in stats] == [3, 4]
+    assert (tmp_path / "iter_0003.pt").exists()
+    assert (tmp_path / "iter_0004.pt").exists()
+
+
+# ---------------------------------------------------------------- atomic saves
+
+def test_save_is_atomic_on_failure(tmp_path, monkeypatch):
+    cfg = make_config(tmp_path)
+    t = Trainer(cfg)
+    t.iteration = 3
+    target = tmp_path / "latest.pt"
+    t.save_checkpoint(target, include_buffer=True)
+    baseline = target.read_bytes()
+    real_save = torch.save
+
+    def failing_save(obj, f):
+        real_save(obj, f)
+        raise OSError("disk full")
+
+    monkeypatch.setattr("smartfour.train.torch.save", failing_save)
+    with pytest.raises(OSError):
+        t.save_checkpoint(target, include_buffer=True)
+    assert target.read_bytes() == baseline  # previous checkpoint untouched
+    assert not list(tmp_path.glob("*.tmp"))  # temp file cleaned up
+
+
+# ---------------------------------------------------------------- optimize guards
+
+def test_optimize_skipped_when_buffer_empty(tmp_path, capsys):
+    cfg = make_config(tmp_path, batch_size=8)
+    t = Trainer(cfg)
+    loss = t._optimize()  # no self-play was ever run
+    assert math.isnan(loss)
+    out, err = capsys.readouterr()
+    assert "skipping optimize" in out + err
+
+
+def test_bn_running_stats_update_during_optimize(tmp_path):
+    """MCTS leaves the net in eval mode; _optimize must switch back to train
+    mode so BatchNorm running statistics actually update."""
+    cfg = make_config(tmp_path, batch_size=8, train_epochs=2)
+    t = Trainer(cfg)
+    t._selfplay(t.net)
+    assert not t.net.training  # MCTS forced eval
+    bn = t.net.blocks[0].bn1
+    before = bn.running_mean.clone()
+    t._optimize()
+    after = bn.running_mean.clone()
+    assert not torch.equal(before, after)
 
 
 def test_config_loads_from_toml():

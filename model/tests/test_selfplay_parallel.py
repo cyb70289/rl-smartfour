@@ -9,6 +9,7 @@ errors.
 
 import multiprocessing as mp
 import queue
+import signal
 
 import pytest
 import torch
@@ -140,6 +141,9 @@ class FakeProc:
         self._alive = alive
         self.exitcode = exitcode
         self.terminated = False
+
+    def start(self):
+        pass
 
     def is_alive(self):
         return self._alive
@@ -273,3 +277,50 @@ def test_load_config_defaults_workers_to_one(tmp_path):
     p = tmp_path / "cfg.toml"
     p.write_text("")
     assert load_config(str(p)).training.selfplay_workers == 1
+
+
+# ---------------------------------------------------------------- interrupt robustness
+
+def _sigint_probe(q):
+    """Spawn target: report whether smartfour.selfplay.ignore_sigint stuck."""
+    from smartfour.selfplay import ignore_sigint
+
+    ignore_sigint()
+    q.put(signal.getsignal(signal.SIGINT) == signal.SIG_IGN)
+
+
+def test_worker_ignores_sigint():
+    """Ctrl-C must not kill workers; the parent alone decides when to stop.
+
+    The trainer's interrupt path terminates workers explicitly; a worker that
+    reacted to the terminal's SIGINT would race the parent's cleanup.
+    """
+    ctx = mp.get_context("spawn")
+    q = ctx.Queue()
+    p = ctx.Process(target=_sigint_probe, args=(q,))
+    p.start()
+    assert q.get(timeout=60) is True
+    p.join(timeout=60)
+    assert p.exitcode == 0
+
+
+def test_selfplay_spawns_daemonic_workers(tmp_path, monkeypatch):
+    """Workers are daemonic so a dying parent can never orphan them."""
+    import smartfour.train as train_mod
+    from smartfour.train import Trainer
+
+    seen = {}
+
+    class RecCtx:
+        def Queue(self):
+            return FakeQueue([samples_to_ipc([one_sample()]), samples_to_ipc([one_sample()])])
+
+        def Process(self, *args, **kwargs):
+            seen["daemon"] = kwargs.get("daemon")
+            return FakeProc()
+
+    monkeypatch.setattr(train_mod.multiprocessing, "get_context", lambda name: RecCtx())
+    t = Trainer(make_config(tmp_path, selfplay_games=2, selfplay_workers=2))
+    t._selfplay_parallel(t.net, 2, 2, fake_bar())
+    assert seen["daemon"] is True
+    assert len(t.buffer) == 2

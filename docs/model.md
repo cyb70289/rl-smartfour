@@ -73,18 +73,24 @@ Training
 2. store `(state, pi, z)` in a replay buffer; `z` is the outcome from each
    stored position's own perspective (+1 win, -1 loss, 0 draw)
 3. optimize for `train_epochs` over sampled batches: policy cross-entropy +
-   value MSE + L2 (AdamW); samples are augmented with a random D4 symmetry
-   transform of the 5x5 board (policy permuted identically, value invariant)
-4. arena: greedy MCTS vs the current best checkpoint (alternating colors,
+   value MSE + L2 (AdamW); the net is switched back to train mode first so
+   BatchNorm running statistics actually update (MCTS leaves it in eval mode);
+   samples are augmented with a random D4 symmetry transform of the 5x5 board
+   (policy permuted identically, value invariant)
+4. arena: greedy MCTS vs the current best net (alternating colors,
    `eval_games` games, `eval_simulations` per move); the candidate replaces
    the best when its win ratio reaches `arena_win_ratio` (default 0.55)
 
-Checkpoints live in `checkpoints/`: `latest.pt` every iteration,
-`best.pt` + `best_iter_XXXX.pt` on improvement. Each checkpoint carries the
-network weights, optimizer state, replay buffer, and iteration counter, so
-training resumes with `--resume`.
-Ctrl+C saves the current state to `latest.pt` so training can be resumed with
-`--resume`.
+Checkpoints live in `checkpoint_dir` (`checkpoints/`):
+
+- `latest.pt` — the exact resume anchor: net, optimizer, best net, replay
+  buffer, iteration counter. Written after every completed iteration and on
+  SIGINT/SIGTERM/crash.
+- `iter_NNNN.pt` — one light snapshot per completed iteration (net,
+  optimizer, best net; no buffer). Historical record; safe to delete old ones
+  manually — resume never depends on a specific `iter_*` file.
+- `best.pt` — slim inference snapshot of the arena-best net (weights + the
+  iteration it won). The UI loads this. Never used for resume.
 
 Parallel self-play
 ------------------
@@ -118,9 +124,13 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt   # torch (CPU) + tqdm
 .venv/bin/pip install pytest                # dev only: run the test suite
 
-.venv/bin/python -m pytest tests/        # full TDD suite (390+ tests)
+.venv/bin/python -m pytest tests/        # full TDD suite (420+ tests)
 
 .venv/bin/python -m smartfour.train --config config.toml --iterations 10
-.venv/bin/python -m smartfour.train --config config.toml --iterations 10 --resume
+                                            # resume is automatic; 10 is a target
+.venv/bin/python -m smartfour.train --config config.toml          # train forever until Ctrl-C
+.venv/bin/python -m smartfour.train --config config.toml --restart --yes
+                                            # wipe checkpoints/ (confirmation prompt
+                                            # without --yes) and start from iteration 1
 .venv/bin/python -m smartfour.infer --checkpoint checkpoints/best.pt --sims 200 --state state.json
 ```

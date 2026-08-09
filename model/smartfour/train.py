@@ -1,15 +1,32 @@
 """AlphaZero training loop: self-play -> replay buffer -> optimize -> arena.
 
-Checkpoints (checkpoint_dir/): latest.pt every iteration, best.pt plus a
-best_iter_XXXX.pt copy whenever the candidate beats the current best in the
-arena. Checkpoints carry net + optimizer + buffer state for resume.
+Checkpoints (checkpoint_dir/):
+  latest.pt    full state (net, optimizer, best_net, replay buffer) — the
+               exact resume anchor; written after every completed iteration
+               and on interrupt/crash.
+  iter_NNNN.pt net + optimizer + best_net only (no buffer) — one light
+               snapshot per completed iteration, for history and manual
+               pruning.
+  best.pt      slim inference snapshot of the arena-best net (weights +
+               iteration the best was set). Never used for resume.
+All writes are atomic (temp file + os.replace), so an interrupt or crash
+mid-save never corrupts an existing checkpoint.
+
+Resume is the default and needs no flag: latest.pt -> newest iter_NNNN.pt ->
+fresh start. A corrupt/unreadable checkpoint or a network-config mismatch is
+a hard error (never a silent fallback); --restart wipes the checkpoint dir
+(after confirmation) to start over. --iterations N is a target: train until
+iteration N, exit immediately when already there; without it, train forever
+until SIGINT/SIGTERM, which save latest.pt before exiting.
 """
 
 import argparse
 import multiprocessing
 import os
 import queue
+import signal
 import sys
+import tempfile
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -46,6 +63,95 @@ def _tqdm(*args, **kwargs):
         bar.ncols = None
         bar.nrows = None
     return bar
+
+
+# ------------------------------------------------------------- checkpoint I/O
+
+def _atomic_save(payload, path) -> None:
+    """torch.save to a temp file in the same directory, then atomically rename.
+
+    An interrupt or crash mid-write leaves the previous checkpoint intact
+    instead of a truncated/corrupt file.
+    """
+    path = Path(path)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+    os.close(fd)
+    try:
+        torch.save(payload, tmp)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _terminate_workers(procs) -> None:
+    """Terminate and join workers, immune to further signals.
+
+    Ctrl-C during teardown must not skip joins and orphan workers, so the
+    signals stay blocked until every process is reaped.
+    """
+    signal.pthread_sigmask(signal.SIG_BLOCK, (signal.SIGINT, signal.SIGTERM))
+    try:
+        for p in procs:
+            if p.is_alive():
+                p.terminate()
+        for p in procs:
+            p.join(timeout=30)
+    finally:
+        signal.pthread_sigmask(signal.SIG_UNBLOCK, (signal.SIGINT, signal.SIGTERM))
+
+
+def _find_resume_checkpoint(checkpoint_dir) -> Path | None:
+    """Resume anchor: latest.pt, else the newest iter_NNNN.pt, else None."""
+    checkpoint_dir = Path(checkpoint_dir)
+    latest = checkpoint_dir / "latest.pt"
+    if latest.exists():
+        return latest
+    iters = sorted(checkpoint_dir.glob("iter_*.pt"))
+    return iters[-1] if iters else None
+
+
+def _confirm_and_wipe(checkpoint_dir, force: bool) -> None:
+    """Delete every file under checkpoint_dir, after confirmation unless --yes.
+
+    A non-terminal stdin never wipes without an explicit --yes; a declined
+    or empty answer aborts with exit code 1.
+    """
+    checkpoint_dir = Path(checkpoint_dir)
+    files = (
+        sorted(p for p in checkpoint_dir.iterdir() if p.is_file())
+        if checkpoint_dir.exists()
+        else []
+    )
+    total = sum(p.stat().st_size for p in files)
+    if not files:
+        print(f"Nothing to delete in {checkpoint_dir}/; training fresh")
+        return
+    if force:
+        _delete_files(files, total)
+        return
+    if not sys.stdin.isatty():
+        raise SystemExit(
+            f"ERROR: --restart would delete {len(files)} file(s) "
+            f"({total / 1e6:.1f} MB) in {checkpoint_dir}/,\n"
+            "  but stdin is not a terminal. Re-run interactively or pass --yes."
+        )
+    answer = input(
+        f"Delete {len(files)} file(s) ({total / 1e6:.1f} MB) in {checkpoint_dir}/? [y/N] "
+    )
+    if answer.strip().lower() not in ("y", "yes"):
+        print("Aborted.")
+        raise SystemExit(1)
+    _delete_files(files, total)
+
+
+def _delete_files(files, total: int) -> None:
+    for f in files:
+        f.unlink()
+    print(f"Deleted {len(files)} file(s) ({total / 1e6:.1f} MB)")
 
 
 class ReplayBuffer:
@@ -105,7 +211,8 @@ class Trainer:
             weight_decay=cfg.training.weight_decay,
         )
         self.buffer = ReplayBuffer(cfg.training.replay_capacity)
-        self.iteration = 0
+        self.iteration = 0          # last *completed* iteration
+        self.best_iteration = 0     # iteration whose net is the current best
         self.checkpoint_dir = Path(cfg.training.checkpoint_dir)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
@@ -130,7 +237,9 @@ class Trainer:
     def _selfplay_parallel(self, net, games: int, workers: int, bar) -> None:
         """Spawn one process per worker; each plays its share of games with a
         fresh net copy and ships samples over a queue. Fails fast if any
-        worker errors or dies before delivering its games.
+        worker errors or dies before delivering its games. Workers are
+        daemonic (a dying parent cannot orphan them) and ignore SIGINT (the
+        parent alone decides when to stop).
         """
         ctx = multiprocessing.get_context("spawn")
         out_q = ctx.Queue()
@@ -148,16 +257,13 @@ class Trainer:
                         self.cfg.mcts.temperature_threshold, n,
                         self.cfg.training.seed + i + 1, num_threads, out_q,
                     ),
+                    daemon=True,
                 )
                 p.start()
                 procs.append(p)
             self._collect_selfplay(games, procs, out_q, bar)
         finally:
-            for p in procs:
-                if p.is_alive():
-                    p.terminate()
-            for p in procs:
-                p.join(timeout=30)
+            _terminate_workers(procs)
 
     def _collect_selfplay(self, games: int, procs, out_q, bar) -> None:
         """Consume worker results until `games` games are pushed to the buffer.
@@ -187,11 +293,7 @@ class Trainer:
                 bar.set_postfix(buffer=len(self.buffer))
                 bar.update(1)
         except BaseException:
-            for p in procs:
-                if p.is_alive():
-                    p.terminate()
-            for p in procs:
-                p.join(timeout=30)
+            _terminate_workers(procs)
             raise
         for p in procs:
             p.join(timeout=60)
@@ -204,6 +306,13 @@ class Trainer:
             raise RuntimeError(f"self-play worker(s) exited with code {bad}")
 
     def _optimize(self) -> float:
+        if len(self.buffer) < self.cfg.training.batch_size:
+            tqdm.write(
+                f"WARNING: replay buffer too small ({len(self.buffer)} < "
+                f"batch_size {self.cfg.training.batch_size}); skipping optimize"
+            )
+            return float("nan")
+        self.net.train()  # MCTS leaves the net in eval mode; BN must update
         losses = []
         n_batches = max(1, len(self.buffer) // self.cfg.training.batch_size)
         total = n_batches * self.cfg.training.train_epochs
@@ -231,7 +340,7 @@ class Trainer:
                 net_a, net_b, self.cfg.mcts, games, eval_simulations, progress=bar.update
             )
 
-    def _maybe_update_best(self) -> dict:
+    def _maybe_update_best(self, current_iteration: int) -> dict:
         games = self.cfg.training.eval_games
         wins, losses, draws = self._arena(
             self.net, self.best_net, games, self.cfg.training.eval_simulations
@@ -240,7 +349,9 @@ class Trainer:
         ratio = wins / total if total else 0.0
         improved = ratio >= self.cfg.training.arena_win_ratio
         if improved:
-            self.save_checkpoint(self.checkpoint_dir / "best.pt", is_best=True)
+            self.best_net.load_state_dict(self.net.state_dict())
+            self.best_iteration = current_iteration
+            self.save_best()
         return {
             "arena_wins": wins,
             "arena_losses": losses,
@@ -251,33 +362,73 @@ class Trainer:
 
     # ------------------------------------------------------------- checkpointing
 
-    def save_checkpoint(self, path, is_best: bool = False) -> None:
+    def save_checkpoint(self, path, include_buffer: bool = False) -> None:
+        _atomic_save(self._payload(include_buffer), path)
+
+    def save_best(self) -> None:
+        """Slim best.pt for inference: the arena-best weights + iteration."""
+        _atomic_save(
+            {
+                "iteration": self.best_iteration,
+                "network": asdict(self.cfg.network),
+                "net_state": self.best_net.state_dict(),
+            },
+            self.checkpoint_dir / "best.pt",
+        )
+
+    def _payload(self, include_buffer: bool) -> dict:
         payload = {
             "iteration": self.iteration,
             "network": asdict(self.cfg.network),
             "net_state": self.net.state_dict(),
             "optimizer_state": self.optimizer.state_dict(),
-            "buffer": self.buffer.state(),
+            "best_net_state": self.best_net.state_dict(),
+            "best_iteration": self.best_iteration,
         }
-        torch.save(payload, path)
-        if is_best:
-            torch.save(payload, self.checkpoint_dir / f"best_iter_{self.iteration:04d}.pt")
+        if include_buffer:
+            payload["buffer"] = self.buffer.state()
+        return payload
 
     def load_checkpoint(self, path) -> None:
-        payload = torch.load(path, weights_only=False)
+        """Load a training checkpoint, hard-failing on corruption or a
+        network-config mismatch: resume must never silently continue from a
+        different architecture."""
+        try:
+            payload = torch.load(path, weights_only=False)
+        except Exception as exc:
+            raise SystemExit(
+                f"ERROR: checkpoint {path} is unreadable/corrupt: {exc}\n"
+                "  Delete it manually, or run with --restart to wipe the checkpoint dir."
+            ) from exc
+        self._apply_payload(payload)
+
+    def _apply_payload(self, payload) -> None:
+        saved_network = payload.get("network")
+        if saved_network is not None and saved_network != asdict(self.cfg.network):
+            raise SystemExit(
+                f"ERROR: checkpoint was trained with network {saved_network},\n"
+                f"  but the config has {asdict(self.cfg.network)}.\n"
+                "  Run with --restart to wipe the checkpoint dir and start fresh."
+            )
         self.iteration = payload["iteration"]
         self.net.load_state_dict(payload["net_state"])
         self.optimizer.load_state_dict(payload["optimizer_state"])
-        self.buffer.load_state(payload["buffer"])
+        if "buffer" in payload:
+            self.buffer.load_state(payload["buffer"])
+        if "best_net_state" in payload:
+            self.best_net.load_state_dict(payload["best_net_state"])
+            self.best_iteration = payload.get("best_iteration", self.iteration)
 
     # ------------------------------------------------------------- driving
 
     def train_iteration(self) -> dict:
-        self.iteration += 1
+        current = self.iteration + 1
         self._selfplay(self.net)
         loss_mean = self._optimize()
-        arena = self._maybe_update_best()
-        self.save_checkpoint(self.checkpoint_dir / "latest.pt")
+        arena = self._maybe_update_best(current)
+        self.iteration = current  # only a fully completed iteration counts
+        self.save_checkpoint(self.checkpoint_dir / f"iter_{current:04d}.pt")
+        self.save_checkpoint(self.checkpoint_dir / "latest.pt", include_buffer=True)
         return {
             "iteration": self.iteration,
             "buffer_size": len(self.buffer),
@@ -285,10 +436,15 @@ class Trainer:
             **arena,
         }
 
-    def train(self, iterations: int) -> list:
+    def train(self, target: int | None) -> list:
+        """Run iterations until `target` (inclusive), or forever when None.
+
+        Returns per-iteration stats dicts.
+        """
         stats = []
-        with _tqdm(total=iterations, desc="iterations", unit="iter") as bar:
-            for _ in range(iterations):
+        remaining = None if target is None else target - self.iteration
+        with _tqdm(total=remaining, desc="iterations", unit="iter") as bar:
+            while target is None or self.iteration < target:
                 t0 = time.perf_counter()
                 stats.append(self.train_iteration())
                 s = stats[-1]
@@ -308,11 +464,21 @@ class Trainer:
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description="Train the smart-four AlphaZero model")
     parser.add_argument("--config", default="config.toml")
-    parser.add_argument("--iterations", type=int, default=1)
-    parser.add_argument("--resume", action="store_true", help="resume from latest.pt")
+    parser.add_argument("--iterations", type=int, default=None,
+                        help="train until this iteration (inclusive); omit to train forever")
+    parser.add_argument("--restart", action="store_true",
+                        help="delete all checkpoints (after confirmation) and train fresh")
+    parser.add_argument("--yes", action="store_true",
+                        help="with --restart: skip the confirmation prompt")
     args = parser.parse_args(argv)
+    if args.iterations is not None and args.iterations < 0:
+        parser.error("--iterations must be >= 0")
 
     cfg = load_config(args.config)
+
+    if args.restart:
+        _confirm_and_wipe(Path(cfg.training.checkpoint_dir), args.yes)
+
     try:
         trainer = Trainer(cfg)
     except KeyboardInterrupt:
@@ -320,13 +486,18 @@ def main(argv=None) -> None:
         # which can take seconds; nothing exists to save yet.
         print("\nInterrupted during setup — nothing to save.", file=sys.stderr)
         raise SystemExit(130)
-    if args.resume:
-        latest = trainer.checkpoint_dir / "latest.pt"
-        if latest.exists():
-            trainer.load_checkpoint(latest)
-            print(f"Resumed from iteration {trainer.iteration}")
-        else:
-            print("No checkpoint to resume; starting fresh")
+
+    resume = _find_resume_checkpoint(trainer.checkpoint_dir)
+    if resume is None:
+        print("No checkpoint found; starting fresh")
+    else:
+        trainer.load_checkpoint(resume)
+        print(f"Resumed from {resume.name} (iteration {trainer.iteration})")
+
+    target = args.iterations
+    if target is not None and trainer.iteration >= target:
+        print(f"Already at iteration {trainer.iteration} (target {target}); nothing to train.")
+        raise SystemExit(0)
 
     n_params = sum(p.numel() for p in trainer.net.parameters())
     print("Smart-four AlphaZero training")
@@ -341,15 +512,42 @@ def main(argv=None) -> None:
     print(f"  arena       {cfg.training.eval_games} games vs best,"
           f" {cfg.training.eval_simulations} sims/move")
     print(f"  checkpoint  {trainer.checkpoint_dir}/")
+    if target is None:
+        print(f"  iterations  training indefinitely (start iteration "
+              f"{trainer.iteration + 1}, until Ctrl-C/SIGTERM)")
+    else:
+        print(f"  iterations  start iteration {trainer.iteration + 1}, "
+              f"{target - trainer.iteration} left (target {target})")
+
+    sigterm_seen = {"flag": False}
+
+    def _on_sigterm(signum, frame):
+        sigterm_seen["flag"] = True
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, _on_sigterm)
 
     t_start = time.perf_counter()
     try:
-        stats = trainer.train(args.iterations)
+        stats = trainer.train(target)
     except KeyboardInterrupt:
+        code = 143 if sigterm_seen["flag"] else 130
         tqdm.write("\nTraining interrupted, saving current state...")
-        trainer.save_checkpoint(trainer.checkpoint_dir / "latest.pt")
-        tqdm.write(f"Saved {trainer.checkpoint_dir}/latest.pt, resume with --resume")
-        raise SystemExit(130)
+        # Block further signals so the save cannot be interrupted; the
+        # process is exiting, so the mask is never lifted.
+        signal.pthread_sigmask(signal.SIG_BLOCK, (signal.SIGINT, signal.SIGTERM))
+        try:
+            trainer.save_checkpoint(trainer.checkpoint_dir / "latest.pt", include_buffer=True)
+        finally:
+            pass
+        tqdm.write(f"Saved {trainer.checkpoint_dir}/latest.pt (iteration {trainer.iteration})")
+        raise SystemExit(code)
+    except Exception:
+        # A crash must not lose the training state either.
+        tqdm.write("\nTraining failed, saving current state...")
+        trainer.save_checkpoint(trainer.checkpoint_dir / "latest.pt", include_buffer=True)
+        tqdm.write(f"Saved {trainer.checkpoint_dir}/latest.pt (iteration {trainer.iteration})")
+        raise
     total = time.perf_counter() - t_start
 
     best_iter = max((s["iteration"] for s in stats if s["improved"]), default=None)
