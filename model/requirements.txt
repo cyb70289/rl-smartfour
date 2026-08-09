@@ -1,8 +1,11 @@
-# Smart-four model dependencies (CPU-only).
+# Smart-four model dependencies.
 #
-# --index-url keeps pip on the PyTorch CPU wheel index, which also mirrors
-# tqdm, so this single file installs everything without pulling the
-# multi-GB CUDA torch wheels from PyPI.
---index-url https://download.pytorch.org/whl/cpu
+# The default `pip install -r requirements.txt` pulls the standard PyTorch
+# wheels from PyPI: CUDA-enabled on Linux, MPS-capable on macOS, CPU fallback
+# elsewhere. Training auto-detects the best device (cuda > mps > cpu).
+#
+# On a CPU-only machine you can skip the multi-GB CUDA wheels by installing
+# torch from the CPU index first:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
 torch>=2.0
 tqdm>=4.66

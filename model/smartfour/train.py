@@ -6,6 +6,9 @@ arena. Checkpoints carry net + optimizer + buffer state for resume.
 """
 
 import argparse
+import multiprocessing
+import os
+import queue
 import sys
 import time
 from dataclasses import asdict
@@ -16,9 +19,16 @@ from tqdm import tqdm
 
 from .arena import play_arena
 from .config import Config, load_config
+from .device import device_name, resolve_device, state_to_cpu
 from .encode import apply_d4, apply_d4_policy, d4_perms
 from .network import ResNet, loss_fn
-from .selfplay import play_game
+from .selfplay import (
+    play_game,
+    samples_from_ipc,
+    selfplay_worker,
+    split_games,
+    worker_num_threads,
+)
 
 
 def _tqdm(*args, **kwargs):
@@ -83,12 +93,14 @@ class ReplayBuffer:
 
 
 class Trainer:
-    def __init__(self, cfg: Config, device="cpu"):
+    def __init__(self, cfg: Config, device=None):
         self.cfg = cfg
-        self.device = device
+        self.device = resolve_device(device)
         torch.manual_seed(cfg.training.seed)
-        self.net = ResNet(cfg.network).to(device)
-        self.best_net = ResNet(cfg.network).to(device)
+        if self.device.type == "cuda":
+            torch.cuda.manual_seed_all(cfg.training.seed)
+        self.net = ResNet(cfg.network).to(self.device)
+        self.best_net = ResNet(cfg.network).to(self.device)
         self.best_net.load_state_dict(self.net.state_dict())
         self.optimizer = torch.optim.AdamW(
             self.net.parameters(),
@@ -104,14 +116,97 @@ class Trainer:
 
     def _selfplay(self, net, games: int | None = None) -> None:
         games = games if games is not None else self.cfg.training.selfplay_games
+        workers = self.cfg.training.selfplay_workers
+        if workers <= 1:
+            with _tqdm(total=games, desc="self-play", unit="game", leave=False) as bar:
+                for _ in range(games):
+                    samples, _winner = play_game(
+                        net, self.cfg.mcts, self.cfg.mcts.temperature_threshold,
+                        device=self.device,
+                    )
+                    self.buffer.push(samples)
+                    bar.set_postfix(buffer=len(self.buffer))
+                    bar.update(1)
+            return
         with _tqdm(total=games, desc="self-play", unit="game", leave=False) as bar:
-            for _ in range(games):
-                samples, _winner = play_game(
-                    net, self.cfg.mcts, self.cfg.mcts.temperature_threshold
+            self._selfplay_parallel(net, games, workers, bar)
+
+    def _selfplay_parallel(self, net, games: int, workers: int, bar) -> None:
+        """Spawn one process per worker; each plays its share of games with a
+        fresh net copy and ships samples over a queue. Fails fast if any
+        worker errors or dies before delivering its games.
+        """
+        ctx = multiprocessing.get_context("spawn")
+        out_q = ctx.Queue()
+        net_state = state_to_cpu(net.state_dict())
+        num_threads = worker_num_threads(workers) if self.device.type == "cpu" else None
+        procs = []
+        try:
+            for i, n in enumerate(split_games(games, workers)):
+                if n == 0:
+                    continue
+                p = ctx.Process(
+                    target=selfplay_worker,
+                    args=(
+                        net_state, self.cfg.network, self.cfg.mcts,
+                        self.cfg.mcts.temperature_threshold, n,
+                        self.cfg.training.seed + i + 1, str(self.device),
+                        num_threads, out_q,
+                    ),
                 )
-                self.buffer.push(samples)
+                p.start()
+                procs.append(p)
+            self._collect_selfplay(games, procs, out_q, bar)
+        finally:
+            for p in procs:
+                if p.is_alive():
+                    p.terminate()
+            for p in procs:
+                p.join(timeout=30)
+
+    def _collect_selfplay(self, games: int, procs, out_q, bar) -> None:
+        """Consume worker results until `games` games are pushed to the buffer.
+
+        Raises RuntimeError when a worker reports failure or dies early, so a
+        broken worker can never hang training or silently shrink the batch;
+        surviving workers are terminated before the error propagates.
+        """
+        received = 0
+        try:
+            while received < games:
+                try:
+                    msg = out_q.get(timeout=0.5)
+                except queue.Empty:
+                    if all(not p.is_alive() for p in procs):
+                        raise RuntimeError(
+                            f"self-play workers exited early: {received}/{games} games collected"
+                        )
+                    continue
+                if (
+                    isinstance(msg, tuple) and len(msg) == 2
+                    and msg[0] == "__worker_error__"
+                ):
+                    raise RuntimeError(f"self-play worker failed: {msg[1]}")
+                self.buffer.push(samples_from_ipc(msg))
+                received += 1
                 bar.set_postfix(buffer=len(self.buffer))
                 bar.update(1)
+        except BaseException:
+            for p in procs:
+                if p.is_alive():
+                    p.terminate()
+            for p in procs:
+                p.join(timeout=30)
+            raise
+        for p in procs:
+            p.join(timeout=60)
+        for p in procs:
+            if p.is_alive():
+                p.terminate()
+                p.join(timeout=10)
+        bad = [p.exitcode for p in procs if p.exitcode != 0]
+        if bad:
+            raise RuntimeError(f"self-play worker(s) exited with code {bad}")
 
     def _optimize(self) -> float:
         losses = []
@@ -124,6 +219,7 @@ class Trainer:
                         self.cfg.training.batch_size,
                         augment=self.cfg.training.symmetry_augment,
                     )
+                    s, pi, z = s.to(self.device), pi.to(self.device), z.to(self.device)
                     logits, value = self.net(s)
                     loss = loss_fn(logits, value, pi, z)
                     self.optimizer.zero_grad()
@@ -165,8 +261,8 @@ class Trainer:
         payload = {
             "iteration": self.iteration,
             "network": asdict(self.cfg.network),
-            "net_state": self.net.state_dict(),
-            "optimizer_state": self.optimizer.state_dict(),
+            "net_state": state_to_cpu(self.net.state_dict()),
+            "optimizer_state": state_to_cpu(self.optimizer.state_dict()),
             "buffer": self.buffer.state(),
         }
         torch.save(payload, path)
@@ -174,7 +270,7 @@ class Trainer:
             torch.save(payload, self.checkpoint_dir / f"best_iter_{self.iteration:04d}.pt")
 
     def load_checkpoint(self, path) -> None:
-        payload = torch.load(path, weights_only=False)
+        payload = torch.load(path, weights_only=False, map_location="cpu")
         self.iteration = payload["iteration"]
         self.net.load_state_dict(payload["net_state"])
         self.optimizer.load_state_dict(payload["optimizer_state"])
@@ -241,10 +337,12 @@ def main(argv=None) -> None:
     n_params = sum(p.numel() for p in trainer.net.parameters())
     print("Smart-four AlphaZero training")
     print(f"  config      {args.config}")
-    print(f"  device      {trainer.device}")
+    print(f"  device      {device_name(trainer.device)}")
     print(f"  network     {cfg.network.blocks} blocks x {cfg.network.base_channels} ch"
           f" ({n_params:,} params)")
-    print(f"  self-play   {cfg.training.selfplay_games} games, {cfg.mcts.simulations} sims/move")
+    print(f"  self-play   {cfg.training.selfplay_games} games"
+          f" x {cfg.training.selfplay_workers} worker(s),"
+          f" {cfg.mcts.simulations} sims/move")
     print(f"  optimize    {cfg.training.train_epochs} epochs, batch {cfg.training.batch_size}")
     print(f"  arena       {cfg.training.eval_games} games vs best,"
           f" {cfg.training.eval_simulations} sims/move")

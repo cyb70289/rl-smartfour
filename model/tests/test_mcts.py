@@ -213,3 +213,57 @@ def test_real_net_policy_legal_on_stacked_state():
     x, z, y = action_to_xyz(chosen)
     assert s.grid[x][z][y] is None
     assert s.grid[x][z][y - 1] is not None if y > 0 else True
+
+
+# ------------------------------------------------------------ device plumbing
+
+class DeviceRecordingNet(FakeNet):
+    """FakeNet that records the device of every batch it evaluates."""
+
+    def __init__(self):
+        super().__init__()
+        self.seen_devices = []
+
+    def __call__(self, t):
+        self.eval_batches += 1
+        self.eval_states += t.shape[0]
+        self.seen_devices.append(t.device.type)
+        return torch.zeros(t.shape[0], 125), torch.zeros(t.shape[0], 1)
+
+
+def test_mcts_moves_inputs_to_configured_device():
+    """Every tensor handed to the net must live on the configured device.
+
+    Uses device='meta' as the oracle: on a CPU-only host a raw CPU encoding
+    would pass device checks trivially, while 'meta' makes a missing
+    `.to(device)` fail loudly. Root build AND batched drain are covered
+    (simulations > batch_eval_size forces multiple drain calls).
+    """
+    net = DeviceRecordingNet()
+    m = MCTS(net, cfg(simulations=40, batch_eval_size=8), device="meta")
+    pi, chosen, root = m.root_policy(root_state(), root_noise=False, temperature=1.0)
+    assert net.seen_devices, "net was never evaluated"
+    assert set(net.seen_devices) == {"meta"}
+    assert abs(pi.sum().item() - 1.0) < 1e-6
+    assert chosen in legal_actions(root_state())
+
+
+def test_mcts_infers_device_from_net_params():
+    """Without an explicit device, MCTS runs on the net's parameter device."""
+    from smartfour.config import NetworkConfig
+    from smartfour.network import ResNet
+
+    torch.manual_seed(9)
+    net = ResNet(NetworkConfig(input_channels=16, blocks=1, base_channels=8,
+                               policy_channels=4, value_channels=4, value_fc=8))
+    m = MCTS(net, cfg(simulations=5))
+    assert m.device == torch.device("cpu")
+    pi, chosen, _ = m.root_policy(root_state(), root_noise=False, temperature=1.0)
+    assert abs(pi.sum().item() - 1.0) < 1e-6
+    assert chosen in legal_actions(root_state())
+
+
+def test_mcts_infers_cpu_for_parameterless_net():
+    """Test doubles without parameters (e.g. FakeNet) still default to CPU."""
+    m = MCTS(FakeNet(), cfg(simulations=5))
+    assert m.device == torch.device("cpu")

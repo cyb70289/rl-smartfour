@@ -2,10 +2,13 @@ Smart-four AlphaZero model
 ==========================
 
 AlphaZero-style training and inference (ResNet + MCTS) for the smart-four
-game (rules in [`game.md`](game.md)), implemented in `model/` with PyTorch,
-CPU only. All network inputs and outputs are from the perspective of the
-*current player* (the player to move), which leverages the color symmetry and
-keeps the design simple; MCTS keeps the same convention.
+game (rules in [`game.md`](game.md)), implemented in `model/` with PyTorch.
+The device is auto-detected at startup — CUDA GPU, then Apple MPS, then CPU —
+with an optional `device` override in code; the same code runs unchanged on a
+GPU box, a Mac, or a CPU-only host. All network inputs and outputs are from
+the perspective of the *current player* (the player to move), which leverages
+the color symmetry and keeps the design simple; MCTS keeps the same
+convention.
 
 Rules recap (see [`game.md`](game.md) and `smartfour/game.py`, a faithful
 port of the UI engine): 5x5 grid, stacks up to 5 high; win by lining 4+ own
@@ -46,12 +49,12 @@ Network
 - value head: 1x1 conv → flatten → MLP → scalar in (-1, 1)
 
 Defaults (`config.toml`): 5 blocks, 64 base channels. `config_small.toml` is
-a reduced profile (3 blocks, 32 channels) for quick CPU proof runs.
+a reduced profile (3 blocks, 32 channels) for quick proof runs on modest
+hardware.
 
 MCTS
 ----
-`smartfour/mcts.py` — standard AlphaZero MCTS, CPU-only, configurable in the
-same TOML file:
+`smartfour/mcts.py` — standard AlphaZero MCTS, configurable in the same TOML file:
 
 - PUCT selection: `Q + c_puct * P * sqrt(N_parent) / (1 + N_child)`; Q is
   negated at each level because every node stores values from its own
@@ -86,6 +89,13 @@ training resumes with `--resume`.
 Ctrl+C saves the current state to `latest.pt` so training can be resumed with
 `--resume`.
 
+Parallel self-play
+------------------
+With `selfplay_workers > 1` in `[training]`, each iteration spawns that many
+processes; every worker rebuilds the net from the current weights, plays its
+share of the games, and ships the samples back over a queue. The trainer
+collects exactly `selfplay_games` games. Arena and inference remain single-process.
+
 Inference
 ---------
 `smartfour/infer.py` — `SmartFourAgent` loads a checkpoint and returns a move
@@ -108,12 +118,17 @@ Running
 ```sh
 cd model
 python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt   # torch (CPU) + tqdm
-.venv/bin/pip install pytest                # dev only: run the test suite
+.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install pytest             # dev only: run the test suite
 
-.venv/bin/python -m pytest tests/        # full TDD suite (300+ tests)
+.venv/bin/python -m pytest tests/        # full TDD suite (400+ tests)
 
 .venv/bin/python -m smartfour.train --config config.toml --iterations 10
 .venv/bin/python -m smartfour.train --config config.toml --iterations 10 --resume
 .venv/bin/python -m smartfour.infer --checkpoint checkpoints/best.pt --sims 200 --state state.json
 ```
+
+Training prints the detected device at startup (`device cuda (...)` /
+`mps` / `cpu`). To force a device, pass `device` to `Trainer(...)` /
+`SmartFourAgent(...)` (e.g. `device="cpu"` to stay on CPU despite a GPU).
+

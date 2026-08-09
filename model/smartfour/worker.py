@@ -8,9 +8,11 @@ the same loaded agent (no per-move process or model-load cost):
     <-  {"id": 1, "move": {"x": 2, "z": 2}}        # or {"move": null} when terminal
     <-  {"id": 1, "error": "ValueError: ..."}      # in-band, loop keeps serving
 
-A single {"ready": true, ...} line is printed once the checkpoint is loaded so
-the bridge can wait for readiness before sending requests. `simulations=0`
-means policy-only (no MCTS search), matching `SmartFourAgent.choose_move`.
+A single {"ready": true, "iteration": n, "device": "<cuda|mps|cpu>"} line is
+printed once the checkpoint is loaded so the bridge can wait for readiness
+before sending requests. The device is auto-detected (CUDA > MPS > CPU).
+`simulations=0` means policy-only (no MCTS search), matching
+`SmartFourAgent.choose_move`.
 
 CLI:  python -m smartfour.worker --checkpoint checkpoints/best.pt
 """
@@ -19,6 +21,7 @@ import argparse
 import json
 import sys
 
+from .device import device_name
 from .infer import SmartFourAgent
 
 
@@ -55,7 +58,14 @@ def main(argv=None) -> None:
     args = parser.parse_args(argv)
 
     agent = SmartFourAgent(args.checkpoint)
-    print(json.dumps({"ready": True, "iteration": agent.iteration}), flush=True)
+    print(
+        json.dumps({
+            "ready": True,
+            "iteration": agent.iteration,
+            "device": device_name(agent.device),
+        }),
+        flush=True,
+    )
 
     worker = Worker(agent)
     for line in sys.stdin:

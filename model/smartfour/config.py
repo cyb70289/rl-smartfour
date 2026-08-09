@@ -28,6 +28,7 @@ class MCTSConfig:
 @dataclass(frozen=True)
 class TrainingConfig:
     selfplay_games: int = 100
+    selfplay_workers: int = 1  # parallel self-play processes (1 = sequential)
     train_epochs: int = 5
     batch_size: int = 128
     replay_capacity: int = 100_000
@@ -51,8 +52,13 @@ class Config:
 def load_config(path: str | Path) -> Config:
     with open(path, "rb") as f:
         raw = tomllib.load(f)
+    training = TrainingConfig(**raw.get("training", {}))
+    if training.selfplay_workers < 1:
+        raise ValueError(
+            f"training.selfplay_workers must be >= 1, got {training.selfplay_workers}"
+        )
     return Config(
         network=NetworkConfig(**raw.get("network", {})),
         mcts=MCTSConfig(**raw.get("mcts", {})),
-        training=TrainingConfig(**raw.get("training", {})),
+        training=training,
     )

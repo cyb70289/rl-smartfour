@@ -16,7 +16,9 @@ and stack up to five high; first to line up four own pieces in 3D space wins
 ## Model
 
 AlphaZero-style training and inference for smart-four (resnet policy/value +
-MCTS), all CPU. See [`docs/model.md`](docs/model.md) for full command line.
+MCTS). Device auto-detected at startup (CUDA > Apple MPS > CPU); self-play
+can parallelize across `selfplay_workers` processes. See
+[`docs/model.md`](docs/model.md) for full command line.
 
 Quick steps to train the model:
 

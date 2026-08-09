@@ -83,7 +83,8 @@ Where things live
   serialized and matched by id; an aborted request's late response is
   discarded; protocol violations or worker death fail in-flight requests.
 - `model/smartfour/worker.py` — persistent newline-JSON worker: loads the
-  checkpoint once, prints a ready line, then answers one request per line
+  checkpoint once, prints a ready line (including the detected device —
+  CUDA/MPS/CPU, auto-selected), then answers one request per line
   (errors in-band, loop keeps serving).
 
 Behavior

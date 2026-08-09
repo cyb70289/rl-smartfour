@@ -96,3 +96,28 @@ def test_malformed_json_raises_clear_error():
             "grid": [[[None for _ in range(5)] for _ in range(5)] for _ in range(5)],
             "pieces_left": {"white": 32, "black": 32}, "current": "red", "winner": None,
         })
+
+
+# ---------------------------------------------------------------- device
+
+def test_agent_device_resolves_automatically(tmp_path):
+    """No accelerator on CI hosts: the agent must land on CPU and load there."""
+    agent = make_agent(tmp_path)
+    assert agent.device == torch.device("cpu")
+    assert next(agent.net.parameters()).device.type == "cpu"
+
+
+def test_agent_honors_explicit_device(tmp_path):
+    """Constructor device kwarg is honored and the net is moved there."""
+    agent = make_agent(tmp_path)
+    agent2 = SmartFourAgent(str(tmp_path / "net.pt"), device="cpu")
+    assert agent2.device == torch.device("cpu")
+    assert next(agent2.net.parameters()).device.type == "cpu"
+
+
+def test_choose_move_runs_on_agent_device(tmp_path):
+    """Both the policy-only and MCTS paths return legal moves on the agent's device."""
+    agent = make_agent(tmp_path)
+    s = apply_move(initial_state(), 0, 0)
+    assert agent.choose_move(s, simulations=0) in legal_moves(s)
+    assert agent.choose_move(s, simulations=5) in legal_moves(s)

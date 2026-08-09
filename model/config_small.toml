@@ -19,6 +19,7 @@ batch_eval_size = 32
 
 [training]
 selfplay_games = 50
+selfplay_workers = 1  # parallel self-play processes (1 = sequential)
 train_epochs = 5
 batch_size = 128
 replay_capacity = 100000

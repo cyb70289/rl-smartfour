@@ -21,6 +21,8 @@ batch_eval_size = 32  # leaf evaluations per net forward
 
 [training]
 selfplay_games = 100  # games per iteration
+selfplay_workers = 1  # parallel self-play processes (1 = sequential); each
+                      # worker is a separate process with its own net copy
 train_epochs = 5      # SGD passes over sampled batches per iteration
 batch_size = 128
 replay_capacity = 100000
