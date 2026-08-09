@@ -4,5 +4,6 @@
 # tqdm, so this single file installs everything without pulling the
 # multi-GB CUDA torch wheels from PyPI.
 --index-url https://download.pytorch.org/whl/cpu
-torch>=2.0
-tqdm>=4.66
+torch
+tqdm
+numpy
