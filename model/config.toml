@@ -1,0 +1,34 @@
+# Smart-four AlphaZero model configuration.
+# All sections are read by smartfour.train / smartfour.evaluate / smartfour.infer.
+
+[network]
+# Input channels: 15 per model.md (current/opponent planes + legality) plus
+# one constant channel = total pieces remaining / 64 (ply count to draw cap).
+input_channels = 16
+blocks = 5            # residual blocks after the stem
+base_channels = 64    # stem + residual width
+policy_channels = 32  # policy head conv width
+value_channels = 16   # value head conv width
+value_fc = 64         # value head hidden layer
+
+[mcts]
+simulations = 200     # tree searches per move during training/eval
+c_puct = 2.0
+dirichlet_alpha = 0.3 # noise concentration per legal action (~25 actions)
+dirichlet_epsilon = 0.25
+temperature_threshold = 12  # plies with tau=1 (exploratory); later plies tau=0
+batch_eval_size = 32  # leaf evaluations per net forward
+
+[training]
+selfplay_games = 100  # games per iteration
+train_epochs = 5      # SGD passes over sampled batches per iteration
+batch_size = 128
+replay_capacity = 100000
+learning_rate = 0.001
+weight_decay = 0.0001
+symmetry_augment = true   # D4 augmentation at sample time
+eval_games = 40       # arena games vs best checkpoint
+eval_simulations = 100
+arena_win_ratio = 0.55    # fraction of wins required to replace best
+checkpoint_dir = "checkpoints"
+seed = 0

@@ -1,0 +1,32 @@
+# Small config for quick CPU proof runs / CI. Same code paths as config.toml,
+# reduced sizes so an iteration finishes in minutes on modest hardware.
+
+[network]
+input_channels = 16
+blocks = 3
+base_channels = 32
+policy_channels = 16
+value_channels = 8
+value_fc = 32
+
+[mcts]
+simulations = 100
+c_puct = 2.0
+dirichlet_alpha = 0.3
+dirichlet_epsilon = 0.25
+temperature_threshold = 12
+batch_eval_size = 32
+
+[training]
+selfplay_games = 50
+train_epochs = 5
+batch_size = 128
+replay_capacity = 100000
+learning_rate = 0.001
+weight_decay = 0.0001
+symmetry_augment = true
+eval_games = 20
+eval_simulations = 50
+arena_win_ratio = 0.55
+checkpoint_dir = "checkpoints"
+seed = 0
