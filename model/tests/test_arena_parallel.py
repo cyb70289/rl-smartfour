@@ -1,10 +1,10 @@
 """Tests for parallel arena — worker process, result collection, dispatch.
 
-Arena parallelism mirrors self-play: one spawned process per `arena_workers`
-plays its share of the alternating-color games with fresh copies of both nets
-and ships per-game results (winner color in net_a's frame) back over a queue;
-the trainer counts exactly `games` games and fails fast on worker errors.
-`arena_workers=1` keeps the exact sequential code path (no spawn).
+Arena parallelism mirrors self-play: one spawned process per `workers` plays
+its share of the alternating-color games with fresh copies of both nets and
+ships per-game results (winner color in net_a's frame) back over a queue; the
+trainer counts exactly `games` games and fails fast on worker errors.
+`workers=1` keeps the exact sequential code path (no spawn).
 """
 
 import multiprocessing as mp
@@ -14,7 +14,7 @@ import pytest
 import torch
 
 from smartfour.arena import _result_in_a_frame, arena_worker
-from smartfour.config import Config, MCTSConfig, NetworkConfig, TrainingConfig, load_config
+from smartfour.config import Config, MCTSConfig, NetworkConfig, TrainingConfig
 from smartfour.game import BLACK, DRAW, WHITE
 from smartfour.network import ResNet
 
@@ -48,8 +48,7 @@ def make_config(tmp_path, **kw):
         weight_decay=0.0,
         symmetry_augment=True,
         eval_games=2,
-        selfplay_workers=1,  # parallel tests override explicitly
-        arena_workers=1,
+        workers=1,  # parallel tests override explicitly
         arena_win_ratio=0.55,
         seed=0,
         checkpoint_dir=str(tmp_path),
@@ -222,8 +221,8 @@ def test_collect_arena_raises_on_nonzero_worker_exit(tmp_path):
 
 # ---------------------------------------------------------------- trainer integration
 
-def test_trainer_arena_workers_one_matches_sequential(tmp_path, monkeypatch):
-    """arena_workers=1 must keep the exact sequential code path (no spawn)."""
+def test_trainer_arena_one_matches_sequential(tmp_path, monkeypatch):
+    """workers=1 must keep the exact sequential code path (no spawn)."""
     import smartfour.train as train_mod
     from smartfour.train import Trainer
 
@@ -234,11 +233,11 @@ def test_trainer_arena_workers_one_matches_sequential(tmp_path, monkeypatch):
         return (3, 1, 0)
 
     def should_not_spawn(*args, **kwargs):
-        raise AssertionError("arena_workers=1 must not spawn workers")
+        raise AssertionError("workers=1 must not spawn workers")
 
     monkeypatch.setattr(train_mod, "play_arena", fake_play_arena)
     monkeypatch.setattr(Trainer, "_arena_parallel", should_not_spawn)
-    t = Trainer(make_config(tmp_path, arena_workers=1))
+    t = Trainer(make_config(tmp_path, workers=1))
     result = t._arena(t.net, t.best_net, 4)
     assert result == (3, 1, 0)
     assert calls == [(t.net, t.best_net, t.cfg.mcts, 4)]
@@ -248,7 +247,7 @@ def test_trainer_arena_with_workers(tmp_path):
     torch.manual_seed(0)
     from smartfour.train import Trainer
 
-    t = Trainer(make_config(tmp_path, arena_workers=2))
+    t = Trainer(make_config(tmp_path, workers=2))
     wins, losses, draws = t._arena(t.net, t.best_net, 4)
     assert wins + losses + draws == 4
 
@@ -269,21 +268,6 @@ def test_arena_spawns_daemonic_workers(tmp_path, monkeypatch):
             return FakeProc()
 
     monkeypatch.setattr(train_mod.multiprocessing, "get_context", lambda name: RecCtx())
-    t = Trainer(make_config(tmp_path, arena_workers=2))
+    t = Trainer(make_config(tmp_path, workers=2))
     assert t._arena(t.net, t.best_net, 4) == (2, 1, 1)
     assert seen["daemon"] is True
-
-
-# ---------------------------------------------------------------- config validation
-
-def test_load_config_rejects_zero_arena_workers(tmp_path):
-    p = tmp_path / "cfg.toml"
-    p.write_text("[training]\narena_workers = 0\n")
-    with pytest.raises(ValueError, match="arena_workers"):
-        load_config(str(p))
-
-
-def test_load_config_defaults_arena_workers_to_eight(tmp_path):
-    p = tmp_path / "cfg.toml"
-    p.write_text("")
-    assert load_config(str(p)).training.arena_workers == 8

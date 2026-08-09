@@ -28,8 +28,8 @@ class MCTSConfig:
 @dataclass(frozen=True)
 class TrainingConfig:
     selfplay_games: int = 100
-    selfplay_workers: int = 8  # parallel self-play processes; clamped to the
-                               # CPU count at startup (1 = sequential)
+    workers: int = 8  # parallel self-play and arena processes; clamped to
+                      # the CPU count at startup (1 = sequential)
     train_epochs: int = 5
     batch_size: int = 128
     replay_capacity: int = 100_000
@@ -37,9 +37,6 @@ class TrainingConfig:
     weight_decay: float = 0.0001
     symmetry_augment: bool = True
     eval_games: int = 40
-    arena_workers: int = 8  # parallel arena processes; clamped to the CPU
-                            # count at startup (1 = sequential); each worker
-                            # is a separate process with both net copies
     arena_win_ratio: float = 0.55
     checkpoint_dir: str = "checkpoints"
     seed: int = 0
@@ -56,13 +53,9 @@ def load_config(path: str | Path) -> Config:
     with open(path, "rb") as f:
         raw = tomllib.load(f)
     training = TrainingConfig(**raw.get("training", {}))
-    if training.selfplay_workers < 1:
+    if training.workers < 1:
         raise ValueError(
-            f"training.selfplay_workers must be >= 1, got {training.selfplay_workers}"
-        )
-    if training.arena_workers < 1:
-        raise ValueError(
-            f"training.arena_workers must be >= 1, got {training.arena_workers}"
+            f"training.workers must be >= 1, got {training.workers}"
         )
     return Config(
         network=NetworkConfig(**raw.get("network", {})),

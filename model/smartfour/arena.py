@@ -1,6 +1,6 @@
 """Head-to-head evaluation: MCTS agents and a random baseline.
 
-The arena can run in parallel: one spawned process per `arena_workers` plays
+The arena can run in parallel: one spawned process per `workers` plays
 its share of the games with fresh copies of both nets (the Python GIL
 serializes the MCTS tree logic, so threads cannot use more than one CPU
 core). Each worker ships per-game results over a queue; the trainer counts

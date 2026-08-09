@@ -4,7 +4,7 @@ Returns (samples, winner): samples are (state_tensor, pi, player, z) tuples
 where z is the game outcome from `player`'s perspective, winner is
 WHITE / BLACK / 'draw'.
 
-Parallel self-play runs one spawned process per `selfplay_workers` (the
+Parallel self-play runs one spawned process per `workers` (the
 Python GIL serializes the MCTS tree logic, so threads cannot use more than
 one CPU core); each worker plays its share of games with its own net copy
 and ships the samples back over a queue.

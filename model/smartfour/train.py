@@ -221,7 +221,7 @@ class Trainer:
 
     def _selfplay(self, net, games: int | None = None) -> None:
         games = games if games is not None else self.cfg.training.selfplay_games
-        workers = self.cfg.training.selfplay_workers
+        workers = self.cfg.training.workers
         if workers <= 1:
             with _tqdm(total=games, desc="self-play", unit="game", leave=False) as bar:
                 for _ in range(games):
@@ -341,7 +341,7 @@ class Trainer:
         return sum(losses) / len(losses) if losses else float("nan")
 
     def _arena(self, net_a, net_b, games: int):
-        workers = self.cfg.training.arena_workers
+        workers = self.cfg.training.workers
         if workers <= 1:
             with _tqdm(total=games, desc="arena", unit="game", leave=False) as bar:
                 return play_arena(net_a, net_b, self.cfg.mcts, games, progress=bar.update)
@@ -556,14 +556,10 @@ def main(argv=None) -> None:
     # Clamp worker counts to the machine's CPU count: spawning more processes
     # than cores only adds context-switch overhead.
     cpus = os.cpu_count() or 1
-    if cfg.training.selfplay_workers > cpus or cfg.training.arena_workers > cpus:
+    if cfg.training.workers > cpus:
         cfg = replace(
             cfg,
-            training=replace(
-                cfg.training,
-                selfplay_workers=min(cfg.training.selfplay_workers, cpus),
-                arena_workers=min(cfg.training.arena_workers, cpus),
-            ),
+            training=replace(cfg.training, workers=min(cfg.training.workers, cpus)),
         )
 
     if args.restart:
@@ -597,11 +593,11 @@ def main(argv=None) -> None:
           f" ({n_params:,} params)")
     print(f"  cpus        {cpus} (worker counts capped at this)")
     print(f"  self-play   {cfg.training.selfplay_games} games"
-          f" x {cfg.training.selfplay_workers} worker(s),"
+          f" x {cfg.training.workers} worker(s),"
           f" {cfg.mcts.simulations} sims/move")
     print(f"  optimize    {cfg.training.train_epochs} epochs, batch {cfg.training.batch_size}")
     print(f"  arena       {cfg.training.eval_games} games vs best"
-          f" x {cfg.training.arena_workers} worker(s),"
+          f" x {cfg.training.workers} worker(s),"
           f" {cfg.mcts.simulations} sims/move")
     print(f"  checkpoint  {trainer.checkpoint_dir}/")
     if target is None:

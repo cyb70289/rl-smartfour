@@ -19,7 +19,7 @@ batch_eval_size = 32
 
 [training]
 selfplay_games = 50
-selfplay_workers = 8  # parallel self-play processes (1 = sequential)
+workers = 8  # parallel self-play and arena processes (1 = sequential)
 train_epochs = 5
 batch_size = 128
 replay_capacity = 100000
@@ -27,7 +27,6 @@ learning_rate = 0.001
 weight_decay = 0.0001
 symmetry_augment = true
 eval_games = 20
-arena_workers = 8  # parallel arena processes (1 = sequential)
 arena_win_ratio = 0.55
 checkpoint_dir = "checkpoints"
 seed = 0

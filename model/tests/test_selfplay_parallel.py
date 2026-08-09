@@ -175,8 +175,7 @@ def make_config(tmp_path, **kw):
         weight_decay=0.0,
         symmetry_augment=True,
         eval_games=2,
-        selfplay_workers=1,  # parallel tests override explicitly
-        arena_workers=1,
+        workers=1,  # parallel tests override explicitly
         arena_win_ratio=0.55,
         seed=0,
         checkpoint_dir=str(tmp_path),
@@ -246,7 +245,7 @@ def test_collect_raises_on_nonzero_worker_exit(tmp_path):
 
 def test_trainer_selfplay_with_workers(tmp_path):
     torch.manual_seed(0)
-    cfg = make_config(tmp_path, selfplay_games=4, selfplay_workers=2)
+    cfg = make_config(tmp_path, selfplay_games=4, workers=2)
     from smartfour.train import Trainer
 
     t = Trainer(cfg)
@@ -259,12 +258,12 @@ def test_trainer_selfplay_with_workers(tmp_path):
         assert z in (-1.0, 0.0, 1.0)
 
 
-def test_trainer_selfplay_workers_one_matches_sequential(tmp_path):
+def test_trainer_selfplay_one_matches_sequential(tmp_path):
     """workers=1 must keep the exact sequential code path (no spawn)."""
     torch.manual_seed(0)
     from smartfour.train import Trainer
 
-    t = Trainer(make_config(tmp_path, selfplay_games=2, selfplay_workers=1))
+    t = Trainer(make_config(tmp_path, selfplay_games=2, workers=1))
     t._selfplay(t.net)
     assert len(t.buffer) >= 2  # every sample of both games recorded
 
@@ -273,15 +272,15 @@ def test_trainer_selfplay_workers_one_matches_sequential(tmp_path):
 
 def test_load_config_rejects_zero_workers(tmp_path):
     p = tmp_path / "cfg.toml"
-    p.write_text("[training]\nselfplay_workers = 0\n")
-    with pytest.raises(ValueError, match="selfplay_workers"):
+    p.write_text("[training]\nworkers = 0\n")
+    with pytest.raises(ValueError, match="workers"):
         load_config(str(p))
 
 
 def test_load_config_defaults_workers_to_eight(tmp_path):
     p = tmp_path / "cfg.toml"
     p.write_text("")
-    assert load_config(str(p)).training.selfplay_workers == 8
+    assert load_config(str(p)).training.workers == 8
 
 
 # ---------------------------------------------------------------- interrupt robustness
@@ -325,7 +324,7 @@ def test_selfplay_spawns_daemonic_workers(tmp_path, monkeypatch):
             return FakeProc()
 
     monkeypatch.setattr(train_mod.multiprocessing, "get_context", lambda name: RecCtx())
-    t = Trainer(make_config(tmp_path, selfplay_games=2, selfplay_workers=2))
+    t = Trainer(make_config(tmp_path, selfplay_games=2, workers=2))
     t._selfplay_parallel(t.net, 2, 2, fake_bar())
     assert seen["daemon"] is True
     assert len(t.buffer) == 2
