@@ -108,20 +108,9 @@ cd model
 python3 -m venv .venv
 .venv/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu pytest
 
-.venv/bin/python -m pytest tests/        # full TDD suite (375 tests)
+.venv/bin/python -m pytest tests/        # full TDD suite (300+ tests)
 
 .venv/bin/python -m smartfour.train --config config.toml --iterations 10
 .venv/bin/python -m smartfour.train --config config.toml --iterations 10 --resume
 .venv/bin/python -m smartfour.infer --checkpoint checkpoints/best.pt --sims 200 --state state.json
 ```
-
-Verification
-------------
-- 375 unit tests: exhaustive win-line coverage over all 3D lines, encoding
-  and D4 symmetry, MCTS value propagation and terminal handling, replay
-  buffer augmentation, checkpoint round-trip, best-model selection.
-- Proof run (`config_small.toml`, 4 iterations): loss 5.24 → 4.07; the
-  candidate beat the previous best in the arena at iterations 1, 3 and 4.
-- Trained `best.pt`: 60/60 (100%) vs a uniform-random opponent with 100-sim
-  search across 3 seeds; 13/7 (65%) policy-only vs 7/13 (35%) for an
-  untrained policy — the learned policy beats random even without search.
