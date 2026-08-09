@@ -175,7 +175,6 @@ def make_config(tmp_path, **kw):
         weight_decay=0.0,
         symmetry_augment=True,
         eval_games=2,
-        eval_simulations=10,
         arena_win_ratio=0.55,
         seed=0,
         checkpoint_dir=str(tmp_path),

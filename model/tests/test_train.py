@@ -22,7 +22,6 @@ def tiny_training(**kw):
     kw.setdefault("weight_decay", 0.0)
     kw.setdefault("symmetry_augment", True)
     kw.setdefault("eval_games", 2)
-    kw.setdefault("eval_simulations", 10)
     kw.setdefault("arena_win_ratio", 0.55)
     kw.setdefault("seed", 0)
     return TrainingConfig(**kw)
@@ -195,7 +194,7 @@ def test_best_replaced_only_above_ratio(tmp_path, monkeypatch):
     cfg = make_config(tmp_path)
     t = Trainer(cfg)
 
-    def fake_arena(net_a, net_b, games, eval_simulations):
+    def fake_arena(net_a, net_b, games):
         return (2, 0, 0)  # candidate wins 2 of 2 -> ratio 1.0
 
     monkeypatch.setattr(t, "_arena", fake_arena)
@@ -217,7 +216,7 @@ def test_best_not_replaced_when_losing(tmp_path, monkeypatch):
     cfg = make_config(tmp_path)
     t = Trainer(cfg)
 
-    def fake_arena(net_a, net_b, games, eval_simulations):
+    def fake_arena(net_a, net_b, games):
         return (0, 2, 0)  # candidate loses
 
     monkeypatch.setattr(t, "_arena", fake_arena)

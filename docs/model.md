@@ -78,8 +78,9 @@ Training
    samples are augmented with a random D4 symmetry transform of the 5x5 board
    (policy permuted identically, value invariant)
 4. arena: greedy MCTS vs the current best net (alternating colors,
-   `eval_games` games, `eval_simulations` per move); the candidate replaces
-   the best when its win ratio reaches `arena_win_ratio` (default 0.55)
+   `eval_games` games, `[mcts]` `simulations` per move); the candidate
+   replaces the best when its win ratio reaches `arena_win_ratio`
+   (default 0.55)
 
 Checkpoints live in `checkpoint_dir` (`checkpoints/`):
 
@@ -92,12 +93,16 @@ Checkpoints live in `checkpoint_dir` (`checkpoints/`):
 - `best.pt` — slim inference snapshot of the arena-best net (weights + the
   iteration it won). The UI loads this. Never used for resume.
 
-Parallel self-play
-------------------
+Parallel self-play and arena
+----------------------------
 With `selfplay_workers > 1` in `[training]`, each iteration spawns that many
 processes; every worker rebuilds the net from the current weights, plays its
 share of the games, and ships the samples back over a queue. The trainer
-collects exactly `selfplay_games` games. Arena and inference remain single-process.
+collects exactly `selfplay_games` games. The arena parallelizes the same way
+with `arena_workers > 1`: each worker rebuilds both nets (candidate and
+best), plays its share of the alternating-color games, and ships per-game
+results back over a queue; the trainer collects exactly `eval_games` games.
+Inference remains single-process.
 
 Inference
 ---------

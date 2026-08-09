@@ -30,7 +30,8 @@ learning_rate = 0.001
 weight_decay = 0.0001
 symmetry_augment = true   # D4 augmentation at sample time
 eval_games = 40       # arena games vs best checkpoint
-eval_simulations = 100
+arena_workers = 1     # parallel arena processes (1 = sequential); each
+                      # worker is a separate process with both net copies
 arena_win_ratio = 0.55    # fraction of wins required to replace best
 checkpoint_dir = "checkpoints"
 seed = 0

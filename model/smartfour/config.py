@@ -36,7 +36,8 @@ class TrainingConfig:
     weight_decay: float = 0.0001
     symmetry_augment: bool = True
     eval_games: int = 40
-    eval_simulations: int = 100
+    arena_workers: int = 1  # parallel arena processes (1 = sequential); each
+                            # worker is a separate process with both net copies
     arena_win_ratio: float = 0.55
     checkpoint_dir: str = "checkpoints"
     seed: int = 0
@@ -56,6 +57,10 @@ def load_config(path: str | Path) -> Config:
     if training.selfplay_workers < 1:
         raise ValueError(
             f"training.selfplay_workers must be >= 1, got {training.selfplay_workers}"
+        )
+    if training.arena_workers < 1:
+        raise ValueError(
+            f"training.arena_workers must be >= 1, got {training.arena_workers}"
         )
     return Config(
         network=NetworkConfig(**raw.get("network", {})),

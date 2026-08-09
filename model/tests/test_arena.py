@@ -46,7 +46,7 @@ def test_play_arena_random_vs_random_completes():
     torch.manual_seed(0)
     a = RandomNet(seed=1)
     b = RandomNet(seed=2)
-    a_wins, b_wins, draws = play_arena(a, b, cfg(), games=6, eval_simulations=10)
+    a_wins, b_wins, draws = play_arena(a, b, cfg(), games=6)
     assert a_wins + b_wins + draws == 6
     assert all(0 <= v <= 6 for v in (a_wins, b_wins, draws))
 
@@ -54,7 +54,7 @@ def test_play_arena_random_vs_random_completes():
 def test_play_arena_same_net_is_balanced():
     torch.manual_seed(3)
     net = RandomNet(seed=4)
-    a_wins, b_wins, draws = play_arena(net, net, cfg(), games=8, eval_simulations=15)
+    a_wins, b_wins, draws = play_arena(net, net, cfg(), games=8)
     assert a_wins + b_wins + draws == 8
     assert abs(a_wins - b_wins) <= 6  # loose balance bound for noisy random play
 
@@ -63,17 +63,17 @@ def test_arena_alternates_colors():
     torch.manual_seed(5)
     a = RandomNet(seed=6)
     b = RandomNet(seed=7)
-    # With eval_simulations=1 and temperature 0, the first player has an
+    # With few simulations and temperature 0, the first player has an
     # advantage; color alternation must be honored (results should be able to
     # differ from a fixed-color run).
-    a_wins, b_wins, draws = play_arena(a, b, cfg(), games=4, eval_simulations=1)
+    a_wins, b_wins, draws = play_arena(a, b, cfg(), games=4)
     assert a_wins + b_wins + draws == 4
 
 
 def test_play_vs_random_counts():
     torch.manual_seed(8)
     net = RandomNet(seed=9)
-    wins, losses, draws = play_vs_random(net, cfg(), games=4, eval_simulations=10, seed=10)
+    wins, losses, draws = play_vs_random(net, cfg(), games=4, seed=10)
     assert wins + losses + draws == 4
 
 
@@ -87,21 +87,21 @@ def test_arena_counts_colors_correctly(monkeypatch):
     # net_a (first arg) wins every game, regardless of color.
     monkeypatch.setattr(
         arena_mod, "_play_two",
-        lambda nw, nb, c, s: WHITE if nw is net_a else BLACK,
+        lambda nw, nb, c: WHITE if nw is net_a else BLACK,
     )
-    a_wins, b_wins, draws = play_arena(net_a, net_b, cfg(), games=4, eval_simulations=1)
+    a_wins, b_wins, draws = play_arena(net_a, net_b, cfg(), games=4)
     assert (a_wins, b_wins, draws) == (4, 0, 0)
 
     # net_b (second arg) wins every game.
     monkeypatch.setattr(
         arena_mod, "_play_two",
-        lambda nw, nb, c, s: BLACK if nw is net_a else WHITE,
+        lambda nw, nb, c: BLACK if nw is net_a else WHITE,
     )
-    a_wins, b_wins, draws = play_arena(net_a, net_b, cfg(), games=4, eval_simulations=1)
+    a_wins, b_wins, draws = play_arena(net_a, net_b, cfg(), games=4)
     assert (a_wins, b_wins, draws) == (0, 4, 0)
 
-    monkeypatch.setattr(arena_mod, "_play_two", lambda nw, nb, c, s: "draw")
-    a_wins, b_wins, draws = play_arena(net_a, net_b, cfg(), games=4, eval_simulations=1)
+    monkeypatch.setattr(arena_mod, "_play_two", lambda nw, nb, c: "draw")
+    a_wins, b_wins, draws = play_arena(net_a, net_b, cfg(), games=4)
     assert (a_wins, b_wins, draws) == (0, 0, 4)
 
 
@@ -110,7 +110,7 @@ def test_play_arena_progress_callback():
     a = RandomNet(seed=18)
     b = RandomNet(seed=19)
     calls = []
-    play_arena(a, b, cfg(), games=3, eval_simulations=5, progress=lambda: calls.append(1))
+    play_arena(a, b, cfg(), games=3, progress=lambda: calls.append(1))
     assert sum(calls) == 3  # called once per game
 
 
@@ -118,9 +118,9 @@ def test_deterministic_with_seed():
     torch.manual_seed(11)
     a = RandomNet(seed=12)
     b = RandomNet(seed=13)
-    r1 = play_arena(a, b, cfg(), games=4, eval_simulations=10)
+    r1 = play_arena(a, b, cfg(), games=4)
     torch.manual_seed(11)
     c = RandomNet(seed=12)
     d = RandomNet(seed=13)
-    r2 = play_arena(c, d, cfg(), games=4, eval_simulations=10)
+    r2 = play_arena(c, d, cfg(), games=4)
     assert r1 == r2

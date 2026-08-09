@@ -34,9 +34,10 @@ from pathlib import Path
 import torch
 from tqdm import tqdm
 
-from .arena import play_arena
+from .arena import arena_worker, play_arena
 from .config import Config, load_config
 from .encode import apply_d4, apply_d4_policy, d4_perms
+from .game import DRAW, WHITE
 from .network import ResNet, loss_fn
 from .selfplay import (
     play_game,
@@ -295,6 +296,11 @@ class Trainer:
         except BaseException:
             _terminate_workers(procs)
             raise
+        self._finish_workers(procs, "self-play")
+
+    def _finish_workers(self, procs, label: str) -> None:
+        """Join successfully-collected workers; reap stragglers and fail on a
+        nonzero exit code. Shared by the self-play and arena collectors."""
         for p in procs:
             p.join(timeout=60)
         for p in procs:
@@ -303,7 +309,7 @@ class Trainer:
                 p.join(timeout=10)
         bad = [p.exitcode for p in procs if p.exitcode != 0]
         if bad:
-            raise RuntimeError(f"self-play worker(s) exited with code {bad}")
+            raise RuntimeError(f"{label} worker(s) exited with code {bad}")
 
     def _optimize(self) -> float:
         if len(self.buffer) < self.cfg.training.batch_size:
@@ -334,17 +340,89 @@ class Trainer:
                     bar.update(1)
         return sum(losses) / len(losses) if losses else float("nan")
 
-    def _arena(self, net_a, net_b, games: int, eval_simulations: int):
+    def _arena(self, net_a, net_b, games: int):
+        workers = self.cfg.training.arena_workers
+        if workers <= 1:
+            with _tqdm(total=games, desc="arena", unit="game", leave=False) as bar:
+                return play_arena(net_a, net_b, self.cfg.mcts, games, progress=bar.update)
         with _tqdm(total=games, desc="arena", unit="game", leave=False) as bar:
-            return play_arena(
-                net_a, net_b, self.cfg.mcts, games, eval_simulations, progress=bar.update
-            )
+            return self._arena_parallel(net_a, net_b, games, workers, bar)
+
+    def _arena_parallel(self, net_a, net_b, games: int, workers: int, bar):
+        """Spawn one process per worker; each plays its share of games with
+        fresh copies of both nets and ships per-game results over a queue.
+        Fails fast if any worker errors or dies before delivering its games.
+        Workers are daemonic (a dying parent cannot orphan them) and ignore
+        SIGINT (the parent alone decides when to stop).
+        """
+        ctx = multiprocessing.get_context("spawn")
+        out_q = ctx.Queue()
+        net_a_state = net_a.state_dict()
+        net_b_state = net_b.state_dict()
+        num_threads = worker_num_threads(workers)
+        procs = []
+        start = 0
+        try:
+            for i, n in enumerate(split_games(games, workers)):
+                if n == 0:
+                    continue
+                p = ctx.Process(
+                    target=arena_worker,
+                    args=(
+                        net_a_state, net_b_state, self.cfg.network, self.cfg.mcts,
+                        n, start, self.cfg.training.seed + i + 1, num_threads, out_q,
+                    ),
+                    daemon=True,
+                )
+                p.start()
+                procs.append(p)
+                start += n
+            return self._collect_arena(games, procs, out_q, bar)
+        finally:
+            _terminate_workers(procs)
+
+    def _collect_arena(self, games: int, procs, out_q, bar) -> tuple:
+        """Consume worker results until `games` games are counted.
+
+        Raises RuntimeError when a worker reports failure or dies early, so a
+        broken worker can never silently shrink the arena; surviving workers
+        are terminated before the error propagates. Results arrive in net_a's
+        frame, so counting is the same as a sequential run.
+        """
+        a_wins = b_wins = draws = 0
+        received = 0
+        try:
+            while received < games:
+                try:
+                    msg = out_q.get(timeout=0.5)
+                except queue.Empty:
+                    if all(not p.is_alive() for p in procs):
+                        raise RuntimeError(
+                            f"arena workers exited early: {received}/{games} games collected"
+                        )
+                    continue
+                if (
+                    isinstance(msg, tuple) and len(msg) == 2
+                    and msg[0] == "__worker_error__"
+                ):
+                    raise RuntimeError(f"arena worker failed: {msg[1]}")
+                if msg == DRAW:
+                    draws += 1
+                elif msg == WHITE:
+                    a_wins += 1
+                else:
+                    b_wins += 1
+                received += 1
+                bar.update(1)
+        except BaseException:
+            _terminate_workers(procs)
+            raise
+        self._finish_workers(procs, "arena")
+        return a_wins, b_wins, draws
 
     def _maybe_update_best(self, current_iteration: int) -> dict:
         games = self.cfg.training.eval_games
-        wins, losses, draws = self._arena(
-            self.net, self.best_net, games, self.cfg.training.eval_simulations
-        )
+        wins, losses, draws = self._arena(self.net, self.best_net, games)
         total = wins + losses + draws
         ratio = wins / total if total else 0.0
         improved = ratio >= self.cfg.training.arena_win_ratio
@@ -509,8 +587,9 @@ def main(argv=None) -> None:
           f" x {cfg.training.selfplay_workers} worker(s),"
           f" {cfg.mcts.simulations} sims/move")
     print(f"  optimize    {cfg.training.train_epochs} epochs, batch {cfg.training.batch_size}")
-    print(f"  arena       {cfg.training.eval_games} games vs best,"
-          f" {cfg.training.eval_simulations} sims/move")
+    print(f"  arena       {cfg.training.eval_games} games vs best"
+          f" x {cfg.training.arena_workers} worker(s),"
+          f" {cfg.mcts.simulations} sims/move")
     print(f"  checkpoint  {trainer.checkpoint_dir}/")
     if target is None:
         print(f"  iterations  training indefinitely (start iteration "
