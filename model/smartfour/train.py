@@ -495,6 +495,12 @@ class Trainer:
         self.optimizer.load_state_dict(payload["optimizer_state"])
         if "buffer" in payload:
             self.buffer.load_state(payload["buffer"])
+        else:
+            tqdm.write(
+                f"WARNING: checkpoint has no replay buffer (likely an iter_*.pt "
+                f"fallback after latest.pt was removed); the buffer is empty, "
+                f"so the next optimize is skipped until self-play refills it."
+            )
         if "best_net_state" in payload:
             self.best_net.load_state_dict(payload["best_net_state"])
             self.best_iteration = payload.get("best_iteration", self.iteration)

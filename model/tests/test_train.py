@@ -341,7 +341,6 @@ def test_iteration_counter_advances_only_on_completion(tmp_path, monkeypatch):
     def boom(net):
         raise KeyboardInterrupt
 
-    # instance attribute: plain function, no implicit self
     monkeypatch.setattr(t, "_selfplay", boom)
     with pytest.raises(KeyboardInterrupt):
         t.train_iteration()
@@ -349,6 +348,23 @@ def test_iteration_counter_advances_only_on_completion(tmp_path, monkeypatch):
     # the interrupt handler's save therefore carries the last completed one
     t.save_checkpoint(tmp_path / "latest.pt", include_buffer=True)
     assert torch.load(tmp_path / "latest.pt", weights_only=False)["iteration"] == 1
+
+
+def test_resume_from_bufferless_checkpoint_warns(tmp_path, capsys):
+    """Resuming from an iter_*.pt (no buffer) warns and keeps the buffer empty."""
+    torch.manual_seed(3)
+    cfg = make_config(tmp_path, eval_games=2)
+    t = Trainer(cfg)
+    t.train_iteration()
+    assert (tmp_path / "iter_0001.pt").exists()
+    # Remove latest.pt so resume falls back to the bufferless iter snapshot.
+    (tmp_path / "latest.pt").unlink()
+    t2 = Trainer(cfg)
+    t2.load_checkpoint(tmp_path / "iter_0001.pt")
+    assert t2.iteration == 1
+    assert len(t2.buffer) == 0  # no buffer restored
+    out = capsys.readouterr().out
+    assert "no replay buffer" in out
 
 
 def test_train_stops_at_target(tmp_path):
