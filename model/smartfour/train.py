@@ -424,7 +424,9 @@ class Trainer:
         games = self.cfg.training.eval_games
         wins, losses, draws = self._arena(self.net, self.best_net, games)
         total = wins + losses + draws
-        ratio = wins / total if total else 0.0
+        # Draws count as half a win so a drawish but stronger candidate can
+        # still clear the threshold instead of being drowned in the denominator.
+        ratio = (wins + 0.5 * draws) / total if total else 0.0
         improved = ratio >= self.cfg.training.arena_win_ratio
         if improved:
             self.best_net.load_state_dict(self.net.state_dict())

@@ -227,6 +227,47 @@ def test_best_not_replaced_when_losing(tmp_path, monkeypatch):
     assert t.best_iteration == 0
 
 
+
+def test_best_replaced_with_draws_scored_half(tmp_path, monkeypatch):
+    """Draws count as half a win: 1 win + 1 draw + 0 losses = 0.75 >= 0.55."""
+    cfg = make_config(tmp_path)
+    t = Trainer(cfg)
+
+    def fake_arena(net_a, net_b, games):
+        return (1, 0, 1)  # ratio = (1 + 0.5) / 2 = 0.75
+
+    monkeypatch.setattr(t, "_arena", fake_arena)
+    t._maybe_update_best(1)
+    assert (tmp_path / "best.pt").exists()
+    assert t.best_iteration == 1
+
+
+def test_best_not_replaced_when_draws_dilute_below_ratio(tmp_path, monkeypatch):
+    """10 draws + 12 wins + 8 losses over 30 games: 12+5=17, 17/30 < 0.55."""
+    cfg = make_config(tmp_path, eval_games=30, arena_win_ratio=0.55)
+    t = Trainer(cfg)
+
+    def fake_arena(net_a, net_b, games):
+        return (12, 8, 10)  # ratio = (12 + 5) / 30 = 0.567 -> promotes
+
+    monkeypatch.setattr(t, "_arena", fake_arena)
+    t._maybe_update_best(1)
+    assert (tmp_path / "best.pt").exists()
+
+    def fake_arena_short(net_a, net_b, games):
+        return (11, 8, 11)  # ratio = (11 + 5.5) / 30 = 0.55 -> promotes (>=)
+
+    monkeypatch.setattr(t, "_arena", fake_arena_short)
+    t._maybe_update_best(2)
+    assert t.best_iteration == 2
+
+    def fake_arena_fail(net_a, net_b, games):
+        return (11, 9, 10)  # ratio = (11 + 5) / 30 = 0.533 -> no promote
+
+    monkeypatch.setattr(t, "_arena", fake_arena_fail)
+    t._maybe_update_best(3)
+    assert t.best_iteration == 2
+
 # ---------------------------------------------------------------- training loop
 
 def test_train_iteration_end_to_end(tmp_path):
