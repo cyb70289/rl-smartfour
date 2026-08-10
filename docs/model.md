@@ -26,9 +26,9 @@ player's perspective:
 - channel 15: constant plane = total pieces remaining / 64, i.e. how close
   the game is to the ply-64 draw cap
 
-The 15-channel layout follows the original draft; channel 16 is an extension:
-the network cannot otherwise tell how many plies remain, and the *sum* of both
-players' remaining pieces is perspective-invariant and exact.
+The 15-channel layout follows the original draft; the 16th channel (index 15)
+is an extension: the network cannot otherwise tell how many plies remain, and
+the *sum* of both players' remaining pieces is perspective-invariant and exact.
 
 Actions are indexed `a = y * 25 + x * 5 + z` (125 logits, plane-major,
 matching `encode.xyz_to_action`). A move is a column `(x, z)`; the piece lands

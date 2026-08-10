@@ -17,8 +17,9 @@ BLACK = 1
 
 DRAW = "draw"
 
-# Canonical line directions as [dx, dz, dy] with dy >= 0: 4 flat + 1 vertical
-# + 8 rising diagonals. Reverses are covered by counting both ways from a cell.
+# Canonical line directions as [dx, dz, dy] with dy in {-1, 0, 1}: 4 flat
+# (dy=0) + 1 vertical + 8 rising diagonals (dy=+/-1). Reverses are covered by
+# counting both ways from a cell.
 DIRS = (
     (1, 0, 0),
     (0, 0, 1),
