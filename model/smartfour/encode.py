@@ -69,13 +69,21 @@ def action_mask(state) -> torch.Tensor:
 
 
 # --------------------------------------------------------------------- D4 group
+_D4_PERMS = None  # cached output of d4_perms(); constant after first call
+_PERM_TENSOR_CACHE: dict = {}  # perm tuple -> long tensor (reused across calls)
 
 def d4_perms() -> list:
     """The 8 dihedral permutations of the 25 column cells.
 
     perm[j] = old linear index (x*5+z) that lands at new index j. Applying a
-    perm to a plane: out[j] = inp[perm[j]].
+    perm to a plane: out[j] = inp[perm[j]]. Cached after first call.
     """
+    global _D4_PERMS
+    if _D4_PERMS is None:
+        _D4_PERMS = _compute_d4_perms()
+    return _D4_PERMS
+
+def _compute_d4_perms() -> list:
     transforms = [
         lambda x, z: (x, z),
         lambda x, z: (z, 4 - x),      # rot90
@@ -96,9 +104,14 @@ def d4_perms() -> list:
         perms.append(perm)
     return perms
 
-
 def _perm_tensor(perm) -> torch.Tensor:
-    return torch.tensor(perm, dtype=torch.long)
+    """Cached (perm tuple -> long tensor) so repeated D4 apply reuses tensors."""
+    key = tuple(perm)
+    t = _PERM_TENSOR_CACHE.get(key)
+    if t is None:
+        t = torch.tensor(perm, dtype=torch.long)
+        _PERM_TENSOR_CACHE[key] = t
+    return t
 
 
 def apply_d4(t: torch.Tensor, perm) -> torch.Tensor:
