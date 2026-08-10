@@ -82,11 +82,12 @@ class MCTS:
             with torch.no_grad():
                 logits, values = self.net(tensors)
             value_of = {id(leaf): v.item() for leaf, v in zip(leaves, values)}
+            leaf_idx = {id(l): i for i, l in enumerate(leaves)}
             expanded = set()
             for path, leaf in pending_order:
                 if id(leaf) not in expanded:
                     expanded.add(id(leaf))
-                    self._expand(leaf, logits[leaves.index(leaf)], value_of[id(leaf)])
+                    self._expand(leaf, logits[leaf_idx[id(leaf)]], value_of[id(leaf)])
                 self._backprop(path, leaf, value_of[id(leaf)])
 
         sims = 0
