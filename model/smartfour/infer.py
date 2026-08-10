@@ -31,7 +31,7 @@ NEG_INF = float("-inf")
 
 class SmartFourAgent:
     def __init__(self, checkpoint_path: str, device="cpu"):
-        payload = torch.load(checkpoint_path, weights_only=False)
+        payload = torch.load(checkpoint_path, weights_only=True)
         net_cfg = NetworkConfig(**payload.get("network", NetworkConfig().__dict__))
         self.net = ResNet(net_cfg).to(device)
         self.net.load_state_dict(payload["net_state"])
