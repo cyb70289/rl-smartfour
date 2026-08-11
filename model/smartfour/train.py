@@ -2,8 +2,8 @@
 
 Checkpoints (checkpoint_dir/):
   latest.pt    full state (net, optimizer, best_net, replay buffer) — the
-               exact resume anchor; written after every completed iteration
-               and on interrupt/crash.
+               exact resume anchor; written atomically after every completed
+               iteration, so it always holds the last completed iteration.
   iter_NNNN.pt net + optimizer + best_net only (no buffer) — one light
                snapshot per completed iteration, for history and manual
                pruning.
@@ -17,7 +17,8 @@ fresh start. A corrupt/unreadable checkpoint or a network-config mismatch is
 a hard error (never a silent fallback); --restart wipes the checkpoint dir
 (after confirmation) to start over. --iterations N is a target: train until
 iteration N, exit immediately when already there; without it, train forever
-until SIGINT/SIGTERM, which save latest.pt before exiting.
+until SIGINT/SIGTERM. An interrupt discards the in-flight iteration (no
+save), so latest.pt always holds the last completed iteration.
 """
 
 import argparse
@@ -615,11 +616,10 @@ def main(argv=None) -> None:
         print(f"  iterations  start iteration {trainer.iteration + 1}, "
               f"{target - trainer.iteration} left (target {target})")
 
-    sigterm_seen = {"flag": False}
-
     def _on_sigterm(signum, frame):
-        sigterm_seen["flag"] = True
-        raise KeyboardInterrupt
+        # Exit cleanly so atexit reaps the daemonic workers, but discard the
+        # in-flight iteration: latest.pt already holds the last completed one.
+        raise SystemExit(143)
 
     signal.signal(signal.SIGTERM, _on_sigterm)
 
@@ -627,23 +627,8 @@ def main(argv=None) -> None:
     try:
         stats = trainer.train(target)
     except KeyboardInterrupt:
-        code = 143 if sigterm_seen["flag"] else 130
-        tqdm.write("\nTraining interrupted, saving current state...")
-        # Block further signals so the save cannot be interrupted; the
-        # process is exiting, so the mask is never lifted.
-        signal.pthread_sigmask(signal.SIG_BLOCK, (signal.SIGINT, signal.SIGTERM))
-        try:
-            trainer.save_checkpoint(trainer.checkpoint_dir / "latest.pt", include_buffer=True)
-        finally:
-            pass
-        tqdm.write(f"Saved {trainer.checkpoint_dir}/latest.pt (iteration {trainer.iteration})")
-        raise SystemExit(code)
-    except Exception:
-        # A crash must not lose the training state either.
-        tqdm.write("\nTraining failed, saving current state...")
-        trainer.save_checkpoint(trainer.checkpoint_dir / "latest.pt", include_buffer=True)
-        tqdm.write(f"Saved {trainer.checkpoint_dir}/latest.pt (iteration {trainer.iteration})")
-        raise
+        # Ctrl-C discards the in-flight iteration; latest.pt is untouched.
+        raise SystemExit(130)
     total = time.perf_counter() - t_start
 
     best_iter = max((s["iteration"] for s in stats if s["improved"]), default=None)

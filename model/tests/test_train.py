@@ -345,9 +345,6 @@ def test_iteration_counter_advances_only_on_completion(tmp_path, monkeypatch):
     with pytest.raises(KeyboardInterrupt):
         t.train_iteration()
     assert t.iteration == 1  # the interrupted iteration is never counted
-    # the interrupt handler's save therefore carries the last completed one
-    t.save_checkpoint(tmp_path / "latest.pt", include_buffer=True)
-    assert torch.load(tmp_path / "latest.pt", weights_only=False)["iteration"] == 1
 
 
 def test_resume_from_bufferless_checkpoint_warns(tmp_path, capsys):

@@ -1,18 +1,15 @@
-"""CLI-level tests for smartfour.train: resume-by-default, --restart,
---iterations as a target, and interrupt handling.
+"""CLI-level tests for smartfour.train: resume-by-default, --restart, and
+--iterations as a target.
 
 These drive main() end to end with a stubbed training loop, pinning the
 user-facing contracts: which checkpoint resumes, when training starts and
-stops, what --restart deletes, and what an interrupt saves.
+stops, and what --restart deletes.
 """
 
-import os
-import signal
 import sys
 from pathlib import Path
 
 import pytest
-import torch
 
 from smartfour.train import Trainer, main
 
@@ -212,50 +209,6 @@ def test_cli_negative_iterations_rejected(tmp_path):
     with pytest.raises(SystemExit) as e:
         main(["--config", str(cfg), "--iterations", "-1"])
     assert e.value.code == 2
-
-
-def test_cli_no_iterations_trains_forever_until_interrupt(tmp_path, monkeypatch, capsys):
-    cfg = write_config(tmp_path)
-
-    def interrupt(self, target):
-        assert target is None
-        raise KeyboardInterrupt
-
-    monkeypatch.setattr(Trainer, "train", interrupt)
-    try:
-        with pytest.raises(SystemExit) as e:
-            main(["--config", str(cfg)])
-        assert e.value.code == 130
-    finally:
-        # main's interrupt path leaves SIGINT/SIGTERM blocked by design (the
-        # real process exits right after); restore for test isolation.
-        signal.pthread_sigmask(signal.SIG_UNBLOCK, (signal.SIGINT, signal.SIGTERM))
-    out = capsys.readouterr().out
-    assert "training indefinitely" in out
-    # the interrupt handler saved the state
-    latest = checkpoint_dir(cfg) / "latest.pt"
-    assert latest.exists()
-    assert torch.load(latest, weights_only=False)["iteration"] == 0
-
-
-# ------------------------------------------------------------- signals
-
-def test_cli_sigterm_saves_and_exits_143(tmp_path, monkeypatch):
-    cfg = write_config(tmp_path)
-
-    def sigterm_self(self, target):
-        os.kill(os.getpid(), signal.SIGTERM)
-
-    monkeypatch.setattr(Trainer, "train", sigterm_self)
-    old = signal.getsignal(signal.SIGTERM)
-    try:
-        with pytest.raises(SystemExit) as e:
-            main(["--config", str(cfg)])
-        assert e.value.code == 143
-        assert (checkpoint_dir(cfg) / "latest.pt").exists()
-    finally:
-        signal.signal(signal.SIGTERM, old)
-        signal.pthread_sigmask(signal.SIG_UNBLOCK, (signal.SIGINT, signal.SIGTERM))
 
 
 # ------------------------------------------------------------- --restart
