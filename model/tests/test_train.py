@@ -10,7 +10,7 @@ from smartfour.config import Config, MCTSConfig, NetworkConfig, TrainingConfig
 from smartfour.encode import action_mask, apply_d4, apply_d4_policy, d4_perms, encode
 from smartfour.game import BLACK, WHITE, apply_move, initial_state, legal_moves
 from smartfour.network import ResNet, loss_fn
-from smartfour.train import ReplayBuffer, Trainer
+from smartfour.train import ReplayBuffer, Trainer, plys_postfix
 
 
 def tiny_training(**kw):
@@ -68,6 +68,15 @@ def some_states():
 def uniform_pi(state):
     mask = action_mask(state)
     return mask / mask.sum()
+
+
+# ---------------------------------------------------------------- self-play bar metric
+
+def test_plys_postfix_rounds_to_integer():
+    assert plys_postfix(0, 0) == "0 plys/game"      # nothing played yet
+    assert plys_postfix(44, 2) == "22 plys/game"    # exact
+    assert plys_postfix(47, 3) == "16 plys/game"    # 15.67 -> 16
+    assert plys_postfix(45, 2) == "22 plys/game"    # 22.5 -> round-half-even
 
 
 # ---------------------------------------------------------------- replay buffer

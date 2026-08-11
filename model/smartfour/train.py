@@ -67,6 +67,15 @@ def _tqdm(*args, **kwargs):
     return bar
 
 
+def plys_postfix(plies: int, games: int) -> str:
+    """Average plies per game over the current self-play phase, for the bar.
+
+    One ply is one move by one player (a turn is two plies), so a game that
+    stored `len(samples)` positions ran exactly that many plies.
+    """
+    return f"{plies / games:.0f} plys/game" if games else "0 plys/game"
+
+
 # ------------------------------------------------------------- checkpoint I/O
 
 def _atomic_save(payload, path) -> None:
@@ -222,12 +231,14 @@ class Trainer:
         workers = self.cfg.training.workers
         if workers <= 1:
             with _tqdm(total=games, desc="self-play", unit="game", leave=False) as bar:
-                for _ in range(games):
+                plies = 0
+                for i in range(games):
                     samples, _winner = play_game(
                         net, self.cfg.mcts, self.cfg.mcts.temperature_threshold
                     )
                     self.buffer.push(samples)
-                    bar.set_postfix(buffer=len(self.buffer))
+                    plies += len(samples)
+                    bar.set_postfix_str(plys_postfix(plies, i + 1))
                     bar.update(1)
             return
         with _tqdm(total=games, desc="self-play", unit="game", leave=False) as bar:
@@ -272,6 +283,7 @@ class Trainer:
         surviving workers are terminated before the error propagates.
         """
         received = 0
+        plies = 0
         try:
             while received < games:
                 try:
@@ -287,9 +299,11 @@ class Trainer:
                     and msg[0] == "__worker_error__"
                 ):
                     raise RuntimeError(f"self-play worker failed: {msg[1]}")
-                self.buffer.push(samples_from_ipc(msg))
+                samples = samples_from_ipc(msg)
+                self.buffer.push(samples)
+                plies += len(samples)
                 received += 1
-                bar.set_postfix(buffer=len(self.buffer))
+                bar.set_postfix_str(plys_postfix(plies, received))
                 bar.update(1)
         except BaseException:
             _terminate_workers(procs)

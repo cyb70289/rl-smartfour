@@ -192,7 +192,7 @@ def make_config(tmp_path, **kw):
 
 
 def fake_bar():
-    return type("Bar", (), {"set_postfix": lambda self, **k: None, "update": lambda self, n: None})()
+    return type("Bar", (), {"set_postfix_str": lambda self, s: None, "update": lambda self, n: None})()
 
 
 def one_sample():
@@ -211,6 +211,28 @@ def test_collect_pushes_all_games(tmp_path):
     s, pi, z = t.buffer.sample(2, augment=False)
     assert s.shape == (2, 16, 5, 5)
     assert pi.shape == (2, 125)
+
+
+def test_collect_reports_avg_plys_per_game(tmp_path):
+    """The self-play bar shows the running average plies per game, refreshed
+    once per completed game. Plies = stored samples = moves (one move per
+    player per ply; a turn is two plies)."""
+    from smartfour.train import Trainer
+
+    t = Trainer(make_config(tmp_path))
+    games = [samples_to_ipc([one_sample()] * 1), samples_to_ipc([one_sample()] * 3)]
+    postfixes = []
+
+    class RecBar:
+        def set_postfix_str(self, s):
+            postfixes.append(s)
+
+        def update(self, n):
+            pass
+
+    t._collect_selfplay(2, [FakeProc(), FakeProc()], FakeQueue(games), RecBar())
+    assert postfixes == ["1 plys/game", "2 plys/game"]  # (1 + 3) / 2 = 2
+    assert len(t.buffer) == 4
 
 
 def test_collect_raises_on_worker_error_marker(tmp_path):
