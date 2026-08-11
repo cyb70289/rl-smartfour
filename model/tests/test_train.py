@@ -149,7 +149,7 @@ def test_checkpoint_round_trip(tmp_path):
         for p in t.best_net.parameters():
             p.add_(0.5)
     t.best_iteration = 4
-    t.save_checkpoint(path, include_buffer=True)
+    t.save_checkpoint(path)
 
     t2 = Trainer(cfg)
     t2.load_checkpoint(path)
@@ -315,20 +315,17 @@ def test_resume_continues_iteration(tmp_path):
 
 # ---------------------------------------------------------------- per-iteration checkpoints
 
-def test_every_iteration_writes_iter_and_latest(tmp_path):
+def test_iterations_write_only_latest(tmp_path):
+    """Each completed iteration rewrites latest.pt; no iter_NNNN.pt
+    snapshots are created (they were removed to save space)."""
     cfg = make_config(tmp_path, eval_games=2)
     t = Trainer(cfg)
     t.train_iteration()
     t.train_iteration()
-    assert (tmp_path / "iter_0001.pt").exists()
-    assert (tmp_path / "iter_0002.pt").exists()
-    iter_payload = torch.load(tmp_path / "iter_0002.pt", weights_only=False)
-    assert iter_payload["iteration"] == 2
-    assert "best_net_state" in iter_payload
-    assert "buffer" not in iter_payload  # iter files are light snapshots
+    assert not list(tmp_path.glob("iter_*.pt"))
     latest = torch.load(tmp_path / "latest.pt", weights_only=False)
     assert latest["iteration"] == 2
-    assert "buffer" in latest  # latest is the exact resume anchor
+    assert "buffer" in latest  # latest holds the exact resume state
     assert len(latest["buffer"][0]) == len(t.buffer)
 
 
@@ -347,21 +344,17 @@ def test_iteration_counter_advances_only_on_completion(tmp_path, monkeypatch):
     assert t.iteration == 1  # the interrupted iteration is never counted
 
 
-def test_resume_from_bufferless_checkpoint_warns(tmp_path, capsys):
-    """Resuming from an iter_*.pt (no buffer) warns and keeps the buffer empty."""
-    torch.manual_seed(3)
-    cfg = make_config(tmp_path, eval_games=2)
+def test_checkpoint_without_buffer_hard_errors(tmp_path):
+    """latest.pt always carries the replay buffer; a bufferless payload is no
+    longer a valid checkpoint (old iter_*.pt format) and hard-errors."""
+    cfg = make_config(tmp_path)
     t = Trainer(cfg)
-    t.train_iteration()
-    assert (tmp_path / "iter_0001.pt").exists()
-    # Remove latest.pt so resume falls back to the bufferless iter snapshot.
-    (tmp_path / "latest.pt").unlink()
+    t.iteration = 3
+    payload = t._payload()
+    del payload["buffer"]
     t2 = Trainer(cfg)
-    t2.load_checkpoint(tmp_path / "iter_0001.pt")
-    assert t2.iteration == 1
-    assert len(t2.buffer) == 0  # no buffer restored
-    out = capsys.readouterr().out
-    assert "no replay buffer" in out
+    with pytest.raises(SystemExit, match="no replay buffer"):
+        t2._apply_payload(payload)
 
 
 def test_train_stops_at_target(tmp_path):
@@ -370,8 +363,8 @@ def test_train_stops_at_target(tmp_path):
     t.iteration = 2
     stats = t.train(4)
     assert [s["iteration"] for s in stats] == [3, 4]
-    assert (tmp_path / "iter_0003.pt").exists()
-    assert (tmp_path / "iter_0004.pt").exists()
+    assert not list(tmp_path.glob("iter_*.pt"))
+    assert (tmp_path / "latest.pt").exists()
 
 
 # ---------------------------------------------------------------- atomic saves
@@ -381,7 +374,7 @@ def test_save_is_atomic_on_failure(tmp_path, monkeypatch):
     t = Trainer(cfg)
     t.iteration = 3
     target = tmp_path / "latest.pt"
-    t.save_checkpoint(target, include_buffer=True)
+    t.save_checkpoint(target)
     baseline = target.read_bytes()
     real_save = torch.save
 
@@ -391,7 +384,7 @@ def test_save_is_atomic_on_failure(tmp_path, monkeypatch):
 
     monkeypatch.setattr("smartfour.train.torch.save", failing_save)
     with pytest.raises(OSError):
-        t.save_checkpoint(target, include_buffer=True)
+        t.save_checkpoint(target)
     assert target.read_bytes() == baseline  # previous checkpoint untouched
     assert not list(tmp_path.glob("*.tmp"))  # temp file cleaned up
 

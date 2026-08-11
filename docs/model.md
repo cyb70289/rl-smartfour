@@ -84,13 +84,11 @@ Training
 
 Checkpoints live in `checkpoint_dir` (`checkpoints/`):
 
-- `latest.pt` — the exact resume anchor: net, optimizer, best net, replay
-  buffer, iteration counter. Written atomically after every completed
+- `latest.pt` — the only per-iteration checkpoint: net, optimizer, best net,
+  replay buffer, iteration counter. Written atomically after every completed
   iteration, so it always holds the last completed one; an interrupt or
-  crash discards the in-flight iteration and never touches it.
-- `iter_NNNN.pt` — one light snapshot per completed iteration (net,
-  optimizer, best net; no buffer). Historical record; safe to delete old ones
-  manually — resume never depends on a specific `iter_*` file.
+  crash discards the in-flight iteration and never touches it. Resume loads
+  this file or starts fresh.
 - `best.pt` — slim inference snapshot of the arena-best net (weights + the
   iteration it won). The UI loads this. Never used for resume.
 

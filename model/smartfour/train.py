@@ -2,19 +2,19 @@
 
 Checkpoints (checkpoint_dir/):
   latest.pt    full state (net, optimizer, best_net, replay buffer) — the
-               exact resume anchor; written atomically after every completed
-               iteration, so it always holds the last completed iteration.
-  iter_NNNN.pt net + optimizer + best_net only (no buffer) — one light
-               snapshot per completed iteration, for history and manual
-               pruning.
+               only per-iteration checkpoint; written atomically after every
+               completed iteration, so it always holds the last completed
+               iteration.
   best.pt      slim inference snapshot of the arena-best net (weights +
                iteration the best was set). Never used for resume.
 All writes are atomic (temp file + os.replace), so an interrupt or crash
-mid-save never corrupts an existing checkpoint.
+mid-save never corrupts an existing checkpoint. Older versions also wrote
+iter_NNNN.pt snapshots per iteration; those are no longer created, and stale
+ones can be deleted manually or wiped with --restart.
 
-Resume is the default and needs no flag: latest.pt -> newest iter_NNNN.pt ->
-fresh start. A corrupt/unreadable checkpoint or a network-config mismatch is
-a hard error (never a silent fallback); --restart wipes the checkpoint dir
+Resume is the default and needs no flag: latest.pt -> fresh start. A
+corrupt/unreadable checkpoint or a network-config mismatch is a hard error
+(never a silent fallback); --restart wipes the checkpoint dir
 (after confirmation) to start over. --iterations N is a target: train until
 iteration N, exit immediately when already there; without it, train forever
 until SIGINT/SIGTERM. An interrupt discards the in-flight iteration (no
@@ -107,13 +107,10 @@ def _terminate_workers(procs) -> None:
 
 
 def _find_resume_checkpoint(checkpoint_dir) -> Path | None:
-    """Resume anchor: latest.pt, else the newest iter_NNNN.pt, else None."""
+    """Resume anchor: latest.pt, else None (fresh start)."""
     checkpoint_dir = Path(checkpoint_dir)
     latest = checkpoint_dir / "latest.pt"
-    if latest.exists():
-        return latest
-    iters = sorted(checkpoint_dir.glob("iter_*.pt"))
-    return iters[-1] if iters else None
+    return latest if latest.exists() else None
 
 
 def _confirm_and_wipe(checkpoint_dir, force: bool) -> None:
@@ -443,8 +440,9 @@ class Trainer:
 
     # ------------------------------------------------------------- checkpointing
 
-    def save_checkpoint(self, path, include_buffer: bool = False) -> None:
-        _atomic_save(self._payload(include_buffer), path)
+    def save_checkpoint(self, path) -> None:
+        """Full training state (net, optimizer, best net, replay buffer)."""
+        _atomic_save(self._payload(), path)
 
     def save_best(self) -> None:
         """Slim best.pt for inference: the arena-best weights + iteration."""
@@ -457,23 +455,21 @@ class Trainer:
             self.checkpoint_dir / "best.pt",
         )
 
-    def _payload(self, include_buffer: bool) -> dict:
-        payload = {
+    def _payload(self) -> dict:
+        return {
             "iteration": self.iteration,
             "network": asdict(self.cfg.network),
             "net_state": self.net.state_dict(),
             "optimizer_state": self.optimizer.state_dict(),
             "best_net_state": self.best_net.state_dict(),
             "best_iteration": self.best_iteration,
+            "buffer": self.buffer.state(),
         }
-        if include_buffer:
-            payload["buffer"] = self.buffer.state()
-        return payload
 
     def load_checkpoint(self, path) -> None:
-        """Load a training checkpoint, hard-failing on corruption or a
-        network-config mismatch: resume must never silently continue from a
-        different architecture."""
+        """Load a training checkpoint, hard-failing on corruption, a missing
+        replay buffer, or a network-config mismatch: resume must never
+        silently continue from a different architecture."""
         try:
             payload = torch.load(path, weights_only=False)
         except Exception as exc:
@@ -494,17 +490,14 @@ class Trainer:
         self.iteration = payload["iteration"]
         self.net.load_state_dict(payload["net_state"])
         self.optimizer.load_state_dict(payload["optimizer_state"])
-        if "buffer" in payload:
-            self.buffer.load_state(payload["buffer"])
-        else:
-            tqdm.write(
-                f"WARNING: checkpoint has no replay buffer (likely an iter_*.pt "
-                f"fallback after latest.pt was removed); the buffer is empty, "
-                f"so the next optimize is skipped until self-play refills it."
+        if "buffer" not in payload:
+            raise SystemExit(
+                "ERROR: checkpoint has no replay buffer; expected a latest.pt "
+                "written by this version of the trainer."
             )
-        if "best_net_state" in payload:
-            self.best_net.load_state_dict(payload["best_net_state"])
-            self.best_iteration = payload.get("best_iteration", self.iteration)
+        self.buffer.load_state(payload["buffer"])
+        self.best_net.load_state_dict(payload["best_net_state"])
+        self.best_iteration = payload["best_iteration"]
 
     # ------------------------------------------------------------- driving
 
@@ -514,8 +507,7 @@ class Trainer:
         loss_mean = self._optimize()
         arena = self._maybe_update_best(current)
         self.iteration = current  # only a fully completed iteration counts
-        self.save_checkpoint(self.checkpoint_dir / f"iter_{current:04d}.pt")
-        self.save_checkpoint(self.checkpoint_dir / "latest.pt", include_buffer=True)
+        self.save_checkpoint(self.checkpoint_dir / "latest.pt")
         return {
             "iteration": self.iteration,
             "buffer_size": len(self.buffer),

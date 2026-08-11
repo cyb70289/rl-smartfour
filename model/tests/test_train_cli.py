@@ -67,7 +67,7 @@ batch_eval_size = 16
     return cfg_path
 
 
-def seed_checkpoint(cfg_path, iteration=5, name="latest.pt", include_buffer=True):
+def seed_checkpoint(cfg_path, iteration=5, name="latest.pt"):
     """Write a valid checkpoint under the config's checkpoint_dir."""
     from smartfour.config import load_config
 
@@ -75,7 +75,7 @@ def seed_checkpoint(cfg_path, iteration=5, name="latest.pt", include_buffer=True
     t = Trainer(cfg)
     t.iteration = iteration
     t.best_iteration = max(0, iteration - 2)
-    t.save_checkpoint(Path(cfg.training.checkpoint_dir) / name, include_buffer=include_buffer)
+    t.save_checkpoint(Path(cfg.training.checkpoint_dir) / name)
     return t
 
 
@@ -129,15 +129,6 @@ def test_cli_fresh_start_without_checkpoint(tmp_path, stub_train, capsys):
     assert stub_train.calls == [(0, 4)]
 
 
-def test_cli_resume_falls_back_to_newest_iter_file(tmp_path, stub_train, capsys):
-    cfg = write_config(tmp_path)
-    seed_checkpoint(cfg, iteration=7, name="iter_0007.pt", include_buffer=False)
-    main(["--config", str(cfg), "--iterations", "10"])
-    out = capsys.readouterr().out
-    assert "Resumed from iter_0007.pt (iteration 7)" in out
-    assert stub_train.calls == [(7, 10)]
-
-
 def test_cli_never_resumes_from_best(tmp_path, stub_train, capsys):
     cfg = write_config(tmp_path)
     seed_checkpoint(cfg, iteration=9, name="best.pt")
@@ -147,6 +138,17 @@ def test_cli_never_resumes_from_best(tmp_path, stub_train, capsys):
     assert stub_train.calls == [(0, 4)]
 
 
+def test_cli_stale_iter_files_are_ignored(tmp_path, stub_train, capsys):
+    """iter_NNNN.pt from older runs are no longer read; without latest.pt
+    resume starts fresh instead of falling back to an iter snapshot."""
+    cfg = write_config(tmp_path)
+    seed_checkpoint(cfg, iteration=7, name="iter_0007.pt")
+    main(["--config", str(cfg), "--iterations", "10"])
+    out = capsys.readouterr().out
+    assert "No checkpoint found; starting fresh" in out
+    assert stub_train.calls == [(0, 10)]
+
+
 def test_cli_corrupt_latest_hard_errors(tmp_path):
     cfg = write_config(tmp_path)
     cdir = checkpoint_dir(cfg)
@@ -154,15 +156,6 @@ def test_cli_corrupt_latest_hard_errors(tmp_path):
     (cdir / "latest.pt").write_bytes(b"garbage, not a checkpoint")
     with pytest.raises(SystemExit, match="corrupt"):
         main(["--config", str(cfg), "--iterations", "4"])
-
-
-def test_cli_corrupt_iter_fallback_hard_errors(tmp_path):
-    cfg = write_config(tmp_path)
-    cdir = checkpoint_dir(cfg)
-    cdir.mkdir(parents=True, exist_ok=True)
-    (cdir / "iter_0007.pt").write_bytes(b"garbage, not a checkpoint")
-    with pytest.raises(SystemExit, match="corrupt"):
-        main(["--config", str(cfg), "--iterations", "10"])
 
 
 def test_cli_config_mismatch_hard_errors(tmp_path):
@@ -217,7 +210,7 @@ def test_cli_restart_confirms_and_wipes(tmp_path, stub_train, tty_stdin, monkeyp
     cfg = write_config(tmp_path)
     cdir = checkpoint_dir(cfg)
     seed_checkpoint(cfg, iteration=5)
-    seed_checkpoint(cfg, iteration=3, name="iter_0003.pt", include_buffer=False)
+    seed_checkpoint(cfg, iteration=3, name="iter_0003.pt")
     monkeypatch.setattr("builtins.input", lambda prompt: "y")
     main(["--config", str(cfg), "--restart", "--iterations", "4"])
     assert not (cdir / "latest.pt").exists()
