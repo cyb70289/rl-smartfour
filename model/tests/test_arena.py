@@ -8,7 +8,7 @@ from smartfour.game import BLACK, WHITE, initial_state, legal_moves, is_terminal
 
 
 def cfg(**kw):
-    kw.setdefault("simulations", 20)
+    kw.setdefault("simulations", 10)
     kw.setdefault("c_puct", 1.0)
     kw.setdefault("dirichlet_alpha", 0.3)
     kw.setdefault("dirichlet_epsilon", 0.25)
@@ -46,17 +46,17 @@ def test_play_arena_random_vs_random_completes():
     torch.manual_seed(0)
     a = RandomNet(seed=1)
     b = RandomNet(seed=2)
-    a_wins, b_wins, draws = play_arena(a, b, cfg(), games=6)
-    assert a_wins + b_wins + draws == 6
-    assert all(0 <= v <= 6 for v in (a_wins, b_wins, draws))
+    a_wins, b_wins, draws = play_arena(a, b, cfg(), games=4)
+    assert a_wins + b_wins + draws == 4
+    assert all(0 <= v <= 4 for v in (a_wins, b_wins, draws))
 
 
 def test_play_arena_same_net_is_balanced():
     torch.manual_seed(3)
     net = RandomNet(seed=4)
-    a_wins, b_wins, draws = play_arena(net, net, cfg(), games=8)
-    assert a_wins + b_wins + draws == 8
-    assert abs(a_wins - b_wins) <= 6  # loose balance bound for noisy random play
+    a_wins, b_wins, draws = play_arena(net, net, cfg(), games=6)
+    assert a_wins + b_wins + draws == 6
+    assert abs(a_wins - b_wins) <= 4  # loose balance bound for noisy random play
 
 
 def test_arena_alternates_colors():

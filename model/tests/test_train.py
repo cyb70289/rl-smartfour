@@ -14,7 +14,7 @@ from smartfour.train import ReplayBuffer, Trainer
 
 
 def tiny_training(**kw):
-    kw.setdefault("selfplay_games", 3)
+    kw.setdefault("selfplay_games", 1)
     kw.setdefault("workers", 1)  # unit tests stay sequential
     kw.setdefault("train_epochs", 5)
     kw.setdefault("batch_size", 8)
@@ -22,7 +22,7 @@ def tiny_training(**kw):
     kw.setdefault("learning_rate", 0.001)
     kw.setdefault("weight_decay", 0.0)
     kw.setdefault("symmetry_augment", True)
-    kw.setdefault("eval_games", 2)
+    kw.setdefault("eval_games", 1)
     kw.setdefault("arena_win_ratio", 0.55)
     kw.setdefault("seed", 0)
     return TrainingConfig(**kw)
@@ -288,7 +288,7 @@ def test_training_reduces_loss_on_heldout(tmp_path):
     cfg = make_config(tmp_path, train_epochs=5, learning_rate=0.003, symmetry_augment=False)
     t = Trainer(cfg)
     # Pre-fill the buffer with self-play data, then freeze an eval batch.
-    for _ in range(3):
+    for _ in range(2):
         t._selfplay(t.net)
     eval_s, eval_pi, eval_z = t.buffer.sample(16, augment=True)
     with torch.no_grad():

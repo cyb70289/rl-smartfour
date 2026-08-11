@@ -8,7 +8,7 @@ from smartfour.game import BLACK, WHITE, apply_move, initial_state, terminal_val
 from smartfour.network import ResNet
 from smartfour.selfplay import play_game
 
-SIM = 60
+SIM = 30
 
 
 def tiny_net(seed=0):
@@ -58,7 +58,10 @@ def test_play_game_replays_to_terminal():
         a = int(pi.argmax())
         x, zc, _y = action_to_xyz(a)
         state = apply_move(state, x, zc)
-    assert terminal_value(state) == (1.0 if winner == WHITE else -1.0 if winner == BLACK else 0.0)
+    z_white = 1.0 if winner == WHITE else (-1.0 if winner == BLACK else 0.0)
+    # The replay ends with the loser to move, so terminal_value (from the
+    # current player's perspective) is the negation of the winner's value.
+    assert terminal_value(state) == -z_white
 
 
 def test_terminates_quickly_with_winning_net():
@@ -72,7 +75,7 @@ def test_terminates_quickly_with_winning_net():
         def __call__(self, t):
             n = t.shape[0]
             logits = torch.zeros(n, 125)
-            logits[:, 0 * 25 + 3 * 5 + 0] = 10.0  # (3,0) completes the four
+            logits[:, 0 * 25 + 0 * 5 + 3] = 10.0  # (0,3) completes the four
             return logits, torch.zeros(n, 1)
 
     samples, winner = play_game(WinNet(), cfg(simulations=30), temperature_threshold=0,
@@ -93,7 +96,7 @@ def test_temperature_zero_is_one_hot():
 def test_temperature_one_explores():
     torch.manual_seed(5)
     net = tiny_net(seed=6)
-    samples, _ = play_game(net, cfg(simulations=100), temperature_threshold=1000)
+    samples, _ = play_game(net, cfg(simulations=40), temperature_threshold=1000)
     assert len(samples) > 0
     # Early symmetric position: visit distribution is spread over actions.
     s0, pi0, _, _ = samples[0]

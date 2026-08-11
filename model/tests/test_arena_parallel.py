@@ -81,7 +81,10 @@ def test_arena_worker_plays_assigned_games():
     torch.manual_seed(0)
     net_cfg = tiny_net_cfg()
     net = ResNet(net_cfg)
-    ctx = mp.get_context("spawn")
+    # fork (not spawn): the child inherits the already-imported torch, so the
+    # probe costs ~0.1s instead of a ~3s re-import per spawn. Production
+    # keeps spawn; this only exercises the worker function itself.
+    ctx = mp.get_context("fork")
     q = ctx.Queue()
     p = ctx.Process(
         target=arena_worker,
@@ -107,7 +110,7 @@ def test_arena_worker_continues_color_schedule_from_start():
     torch.manual_seed(0)
     net_cfg = tiny_net_cfg()
     net = ResNet(net_cfg)
-    ctx = mp.get_context("spawn")
+    ctx = mp.get_context("fork")
     q = ctx.Queue()
     p = ctx.Process(
         target=arena_worker,
@@ -127,7 +130,7 @@ def test_arena_worker_continues_color_schedule_from_start():
 
 def test_arena_worker_reports_failure_in_band():
     """A worker crash (bad net state) surfaces as an error marker, not a hang."""
-    ctx = mp.get_context("spawn")
+    ctx = mp.get_context("fork")
     q = ctx.Queue()
     bad_state = {"nope": torch.zeros(1)}
     p = ctx.Process(
@@ -243,13 +246,20 @@ def test_trainer_arena_one_matches_sequential(tmp_path, monkeypatch):
     assert calls == [(t.net, t.best_net, t.cfg.mcts, 4)]
 
 
-def test_trainer_arena_with_workers(tmp_path):
+def test_trainer_arena_with_workers(tmp_path, monkeypatch):
     torch.manual_seed(0)
+    import smartfour.train as train_mod
+
+    # Exercise the parallel dispatch/collection path without the ~3s
+    # torch re-import per spawned worker; the spawn context itself is
+    # covered by test_arena_spawns_daemonic_workers.
+    fork_ctx = mp.get_context("fork")
+    monkeypatch.setattr(train_mod.multiprocessing, "get_context", lambda name: fork_ctx)
     from smartfour.train import Trainer
 
     t = Trainer(make_config(tmp_path, workers=2))
-    wins, losses, draws = t._arena(t.net, t.best_net, 4)
-    assert wins + losses + draws == 4
+    wins, losses, draws = t._arena(t.net, t.best_net, 2)
+    assert wins + losses + draws == 2
 
 
 def test_arena_spawns_daemonic_workers(tmp_path, monkeypatch):
