@@ -74,6 +74,18 @@ def loss_fn(logits: torch.Tensor, value: torch.Tensor, pi: torch.Tensor, z: torc
     illegal actions); value/z (B, 1). L2 regularization is applied through the
     optimizer's weight decay.
     """
+    return loss_components(logits, value, pi, z)[2]
+
+
+def loss_components(logits, value, pi, z):
+    """Split the AlphaZero loss into (policy_ce, value_mse, combined) means.
+
+    Kept separate from loss_fn so the trainer can report which component is
+    actually decreasing; a collapsing policy shows up as a value loss that
+    stays flat or grows while the policy loss drops toward 0.
+    """
     policy_loss = -torch.sum(pi * torch.log_softmax(logits, dim=1), dim=1)
     value_loss = (value - z) ** 2
-    return (policy_loss + value_loss.squeeze(1)).mean()
+    pol = policy_loss.mean()
+    val = value_loss.squeeze(1).mean()
+    return pol, val, pol + val

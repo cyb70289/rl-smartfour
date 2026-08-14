@@ -81,7 +81,53 @@ Training
    `eval_games` games, `[mcts]` `simulations` per move); the candidate
    replaces the best when its win ratio reaches `arena_win_ratio`
    (default 0.55)
+5. before iteration 1 of a fresh start, when `pretrain_games > 0`
+   (`[training]`), the value head is bootstrapped on random-rollout outcomes
+   (see "Value bootstrap" below); resumes skip it.
 
+Value bootstrap (`smartfour/pretrain.py`)
+----------------------------------------
+A freshly initialized value head predicts ~0 everywhere, which gives PUCT no
+q-signal: unvisited children always outscore visited ones, so every node's
+~25 children fill breadth-first before any descends, and the search freezes
+at ~3 plies of depth at ANY simulation budget (depth ~ log_25(sims)). Deep
+tactics (forks, 2-ply threats) then never enter the training data and the
+value never improves — a self-reinforcing collapse into short races.
+
+`pretrain_games > 0` breaks the cycle once, before iteration 1: `pretrain.py`
+plays that many random games and labels the states in the last `tail_plies`
+plies of each game with the average of `rollouts` (=20) random completions.
+The value head (plus the shared trunk; the policy head is frozen) then trains
+`pretrain_epochs` epochs of MSE against those soft labels. The result is a
+value function that already knows live threats, so MCTS concentrates visits
+and the policy can learn real tactics from the very first iteration.
+
+Diagnostics
+-----------
+Every iteration appends one JSON row to `checkpoint_dir/diagnostics.jsonl`
+and prints a `[diag it N]` block. Key fields (see
+`smartfour/diagnostics.py` and `tools/analyze_diag.py`):
+
+- `plies` (mean/median/hist): self-play game length. At 100 sims with a
+  random net this starts ~17 and collapses to ~12 as the value/policy race;
+  the ply histogram shows games ending at 7-11 (fast races).
+- `depth` (mean/max): MCTS search depth. Frozen at ~2-3 is the signature of
+  the breadth-first fill described above.
+- `root_width`, `root_entropy`, `net_policy_entropy`: exploration health;
+  a collapse into a few moves shows up as width << 25 or entropy -> 0.
+- `root_value` and `value_alignment`/`value_calibration`: value-head quality.
+  Alignment near 0 means the value head has no predictive power.
+- `states_per_game`, `cross_game_redundancy`, `novel vs buffer`: how much
+  distinct state space self-play covers each iteration.
+- buffer `dup`/`distinct` and `pi entropy`/`one-hot`: replay-buffer
+  duplication and how peaked the stored targets are.
+- `loss pol/val`: the policy and value loss components separately.
+
+Tactical probes (`tools/probe.py`)
+---------------------------------
+`tools/probe.py --checkpoint checkpoints/best.pt --sims 200` tests a
+checkpoint on reachable synthetic positions: immediate wins, one-ply blocks,
+and 4-ply fork positions (prevent/execute), plus a vs-random win rate.
 Checkpoints live in `checkpoint_dir` (`checkpoints/`):
 
 - `latest.pt` — the only per-iteration checkpoint: net, optimizer, best net,

@@ -22,6 +22,7 @@ save), so latest.pt always holds the last completed iteration.
 """
 
 import argparse
+import json
 import multiprocessing
 import os
 import queue
@@ -37,9 +38,11 @@ from tqdm import tqdm
 
 from .arena import arena_worker, play_arena
 from .config import Config, load_config
+from .diagnostics import aggregate_games, buffer_stats, format_lines
 from .encode import apply_d4, apply_d4_policy, d4_perms
 from .game import DRAW, WHITE
-from .network import ResNet, loss_fn
+from .network import ResNet, loss_components
+from .pretrain import pretrain_value
 from .selfplay import (
     play_game,
     samples_from_ipc,
@@ -223,26 +226,32 @@ class Trainer:
         self.best_iteration = 0     # iteration whose net is the current best
         self.checkpoint_dir = Path(cfg.training.checkpoint_dir)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        self._buf_hashes: set = set()  # tensor hashes of states pushed this run
 
     # ------------------------------------------------------------- internals
 
-    def _selfplay(self, net, games: int | None = None) -> None:
+    def _selfplay(self, net, games: int | None = None) -> list:
+        """Play `games` self-play games; returns the per-game stats dicts."""
         games = games if games is not None else self.cfg.training.selfplay_games
         workers = self.cfg.training.workers
         if workers <= 1:
+            game_stats = []
             with _tqdm(total=games, desc="self-play", unit="game", leave=False) as bar:
                 plies = 0
                 for i in range(games):
+                    stats: dict = {}
                     samples, _winner = play_game(
-                        net, self.cfg.mcts, self.cfg.mcts.temperature_threshold
+                        net, self.cfg.mcts, self.cfg.mcts.temperature_threshold,
+                        stats_out=stats,
                     )
                     self.buffer.push(samples)
+                    game_stats.append(stats)
                     plies += len(samples)
                     bar.set_postfix_str(plys_postfix(plies, i + 1))
                     bar.update(1)
-            return
+            return game_stats
         with _tqdm(total=games, desc="self-play", unit="game", leave=False) as bar:
-            self._selfplay_parallel(net, games, workers, bar)
+            return self._selfplay_parallel(net, games, workers, bar)
 
     def _selfplay_parallel(self, net, games: int, workers: int, bar) -> None:
         """Spawn one process per worker; each plays its share of games with a
@@ -271,19 +280,21 @@ class Trainer:
                 )
                 p.start()
                 procs.append(p)
-            self._collect_selfplay(games, procs, out_q, bar)
+            return self._collect_selfplay(games, procs, out_q, bar)
         finally:
             _terminate_workers(procs)
 
-    def _collect_selfplay(self, games: int, procs, out_q, bar) -> None:
+    def _collect_selfplay(self, games: int, procs, out_q, bar) -> list:
         """Consume worker results until `games` games are pushed to the buffer.
 
         Raises RuntimeError when a worker reports failure or dies early, so a
         broken worker can never hang training or silently shrink the batch;
         surviving workers are terminated before the error propagates.
+        Returns the per-game stats dicts shipped with the samples.
         """
         received = 0
         plies = 0
+        game_stats = []
         try:
             while received < games:
                 try:
@@ -299,8 +310,14 @@ class Trainer:
                     and msg[0] == "__worker_error__"
                 ):
                     raise RuntimeError(f"self-play worker failed: {msg[1]}")
-                samples = samples_from_ipc(msg)
+                if isinstance(msg, tuple) and len(msg) == 2:
+                    samples = samples_from_ipc(msg[0])
+                    gstats = msg[1] if isinstance(msg[1], dict) else None
+                else:
+                    samples = samples_from_ipc(msg)
+                    gstats = None
                 self.buffer.push(samples)
+                game_stats.append(gstats)
                 plies += len(samples)
                 received += 1
                 bar.set_postfix_str(plys_postfix(plies, received))
@@ -309,6 +326,7 @@ class Trainer:
             _terminate_workers(procs)
             raise
         self._finish_workers(procs, "self-play")
+        return game_stats
 
     def _finish_workers(self, procs, label: str) -> None:
         """Join successfully-collected workers; reap stragglers and fail on a
@@ -323,15 +341,18 @@ class Trainer:
         if bad:
             raise RuntimeError(f"{label} worker(s) exited with code {bad}")
 
-    def _optimize(self) -> float:
+    def _optimize(self) -> tuple:
+        """Gradient steps on the replay buffer; returns (mean, pol, val) losses."""
         if len(self.buffer) < self.cfg.training.batch_size:
             tqdm.write(
                 f"WARNING: replay buffer too small ({len(self.buffer)} < "
                 f"batch_size {self.cfg.training.batch_size}); skipping optimize"
             )
-            return float("nan")
+            return float("nan"), float("nan"), float("nan")
         self.net.train()  # MCTS leaves the net in eval mode; BN must update
         losses = []
+        pols = []
+        vals = []
         n_batches = max(1, len(self.buffer) // self.cfg.training.batch_size)
         total = n_batches * self.cfg.training.train_epochs
         with _tqdm(total=total, desc="optimize", unit="batch", leave=False) as bar:
@@ -342,21 +363,36 @@ class Trainer:
                         augment=self.cfg.training.symmetry_augment,
                     )
                     logits, value = self.net(s)
-                    loss = loss_fn(logits, value, pi, z)
+                    pol, val, loss = loss_components(logits, value, pi, z)
                     self.optimizer.zero_grad()
                     loss.backward()
                     self.optimizer.step()
                     losses.append(loss.item())
+                    pols.append(pol.item())
+                    vals.append(val.item())
                     recent = losses[-50:]
-                    bar.set_postfix(loss=f"{sum(recent) / len(recent):.4f}")
+                    bar.set_postfix(
+                        loss=f"{sum(recent) / len(recent):.4f}",
+                        pol=f"{sum(pols[-50:]) / len(pols[-50:]):.3f}",
+                        val=f"{sum(vals[-50:]) / len(vals[-50:]):.3f}",
+                    )
                     bar.update(1)
-        return sum(losses) / len(losses) if losses else float("nan")
+        return (
+            sum(losses) / len(losses) if losses else float("nan"),
+            sum(pols) / len(pols) if pols else float("nan"),
+            sum(vals) / len(vals) if vals else float("nan"),
+        )
 
     def _arena(self, net_a, net_b, games: int):
         workers = self.cfg.training.workers
         if workers <= 1:
             with _tqdm(total=games, desc="arena", unit="game", leave=False) as bar:
-                return play_arena(net_a, net_b, self.cfg.mcts, games, progress=bar.update)
+                plies_out = []
+                w, l, d = play_arena(
+                    net_a, net_b, self.cfg.mcts, games,
+                    progress=bar.update, plies_out=plies_out,
+                )
+                return w, l, d, sum(plies_out)
         with _tqdm(total=games, desc="arena", unit="game", leave=False) as bar:
             return self._arena_parallel(net_a, net_b, games, workers, bar)
 
@@ -402,6 +438,7 @@ class Trainer:
         frame, so counting is the same as a sequential run.
         """
         a_wins = b_wins = draws = 0
+        plies = 0
         received = 0
         try:
             while received < games:
@@ -418,9 +455,14 @@ class Trainer:
                     and msg[0] == "__worker_error__"
                 ):
                     raise RuntimeError(f"arena worker failed: {msg[1]}")
-                if msg == DRAW:
+                if isinstance(msg, tuple) and len(msg) == 2:
+                    result, game_plies = msg
+                    plies += game_plies
+                else:
+                    result = msg  # legacy plain-result message
+                if result == DRAW:
                     draws += 1
-                elif msg == WHITE:
+                elif result == WHITE:
                     a_wins += 1
                 else:
                     b_wins += 1
@@ -430,11 +472,11 @@ class Trainer:
             _terminate_workers(procs)
             raise
         self._finish_workers(procs, "arena")
-        return a_wins, b_wins, draws
+        return a_wins, b_wins, draws, plies
 
     def _maybe_update_best(self, current_iteration: int) -> dict:
         games = self.cfg.training.eval_games
-        wins, losses, draws = self._arena(self.net, self.best_net, games)
+        wins, losses, draws, plies = self._arena(self.net, self.best_net, games)
         total = wins + losses + draws
         # Draws count as half a win so a drawish but stronger candidate can
         # still clear the threshold instead of being drowned in the denominator.
@@ -449,6 +491,7 @@ class Trainer:
             "arena_losses": losses,
             "arena_draws": draws,
             "arena_ratio": ratio,
+            "arena_plies": plies,
             "improved": improved,
         }
 
@@ -517,8 +560,9 @@ class Trainer:
 
     def train_iteration(self) -> dict:
         current = self.iteration + 1
-        self._selfplay(self.net)
-        loss_mean = self._optimize()
+        game_stats = self._selfplay(self.net)
+        self._selfplay_diag(current, game_stats)
+        loss_mean, policy_loss, value_loss = self._optimize()
         arena = self._maybe_update_best(current)
         self.iteration = current  # only a fully completed iteration counts
         self.save_checkpoint(self.checkpoint_dir / "latest.pt")
@@ -526,8 +570,40 @@ class Trainer:
             "iteration": self.iteration,
             "buffer_size": len(self.buffer),
             "loss_mean": loss_mean,
+            "policy_loss": policy_loss,
+            "value_loss": value_loss,
             **arena,
         }
+
+    def _selfplay_diag(self, current: int, game_stats: list) -> None:
+        """Aggregate self-play diagnostics, print them, and append to JSONL."""
+        agg = aggregate_games(game_stats)
+        novel_frac = self._novelty(game_stats)
+        buf = buffer_stats(*self.buffer.state()[:2])
+        diag = {
+            "agg": agg,
+            "buffer": buf,
+            "novel_frac": novel_frac,
+        }
+        for line in format_lines(current, agg, buf, novel_frac, None):
+            tqdm.write(line)
+        try:
+            with open(self.checkpoint_dir / "diagnostics.jsonl", "a") as f:
+                f.write(json.dumps({"iteration": current, **diag}) + "\n")
+        except OSError as exc:
+            tqdm.write(f"WARNING: could not write diagnostics.jsonl: {exc}")
+
+    def _novelty(self, game_stats: list) -> float:
+        """Fraction of this iteration's stored samples already in the buffer."""
+        new_hashes = []
+        for g in game_stats:
+            if g:
+                new_hashes.extend(g.get("sample_hashes") or [])
+        if not new_hashes:
+            return 0.0
+        novel = sum(1 for h in new_hashes if h not in self._buf_hashes)
+        self._buf_hashes.update(new_hashes)
+        return novel / len(new_hashes)
 
     def train(self, target: int | None) -> list:
         """Run iterations until `target` (inclusive), or forever when None.
@@ -544,10 +620,12 @@ class Trainer:
                 s["elapsed"] = time.perf_counter() - t0
                 bar.update(1)
                 tqdm.write(
-                    f"iter {s['iteration']:3d}  loss {s['loss_mean']:.4f}  "
+                    f"iter {s['iteration']:3d}  loss {s['loss_mean']:.4f}"
+                    f" (pol {s['policy_loss']:.3f} val {s['value_loss']:.3f})  "
                     f"buffer {s['buffer_size']}  "
                     f"arena {s['arena_wins']}W/{s['arena_losses']}L/{s['arena_draws']}D"
-                    f" ({s['arena_ratio']:.2f})  "
+                    f" ({s['arena_ratio']:.2f}) "
+                    f"{s['arena_plies'] // max(1, s['arena_wins'] + s['arena_losses'] + s['arena_draws'])}ply/g  "
                     f"{'BEST ' if s['improved'] else ''}"
                     f"[{s['elapsed']:.1f}s]"
                 )
@@ -615,12 +693,35 @@ def main(argv=None) -> None:
           f" x {cfg.training.workers} worker(s),"
           f" {cfg.mcts.simulations} sims/move")
     print(f"  checkpoint  {trainer.checkpoint_dir}/")
+    if resume is None and cfg.training.pretrain_games > 0:
+        print(f"  pretrain    {cfg.training.pretrain_games} random games"
+              f" x {cfg.training.pretrain_epochs} epochs (value head only)")
     if target is None:
         print(f"  iterations  training indefinitely (start iteration "
               f"{trainer.iteration + 1}, until Ctrl-C/SIGTERM)")
     else:
         print(f"  iterations  start iteration {trainer.iteration + 1}, "
               f"{target - trainer.iteration} left (target {target})")
+
+    if resume is None and cfg.training.pretrain_games > 0:
+        tqdm.write("Pretraining value head on random-rollout outcomes...")
+        t0 = time.perf_counter()
+        with _tqdm(desc="pretrain value", unit="batch", leave=False) as bar:
+            trainer.net.train()
+            mse = pretrain_value(
+                trainer.net,
+                cfg.training.pretrain_games,
+                cfg.training.pretrain_epochs,
+                cfg.training.batch_size,
+                cfg.training.pretrain_lr,
+                cfg.training.weight_decay,
+                cfg.training.seed + 12345,
+                progress=bar.update,
+            )
+            trainer.net.eval()
+        trainer.best_net.load_state_dict(trainer.net.state_dict())
+        print(f"  pretrain    done in {time.perf_counter() - t0:.0f}s,"
+              f" final value MSE {mse:.4f}")
 
     def _on_sigterm(signum, frame):
         # Exit cleanly so atexit reaps the daemonic workers, but discard the

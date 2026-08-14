@@ -87,7 +87,7 @@ def test_arena_counts_colors_correctly(monkeypatch):
     # net_a (first arg) wins every game, regardless of color.
     monkeypatch.setattr(
         arena_mod, "_play_two",
-        lambda nw, nb, c: WHITE if nw is net_a else BLACK,
+        lambda nw, nb, c: (WHITE if nw is net_a else BLACK, 1),
     )
     a_wins, b_wins, draws = play_arena(net_a, net_b, cfg(), games=4)
     assert (a_wins, b_wins, draws) == (4, 0, 0)
@@ -95,12 +95,12 @@ def test_arena_counts_colors_correctly(monkeypatch):
     # net_b (second arg) wins every game.
     monkeypatch.setattr(
         arena_mod, "_play_two",
-        lambda nw, nb, c: BLACK if nw is net_a else WHITE,
+        lambda nw, nb, c: (BLACK if nw is net_a else WHITE, 1),
     )
     a_wins, b_wins, draws = play_arena(net_a, net_b, cfg(), games=4)
     assert (a_wins, b_wins, draws) == (0, 4, 0)
 
-    monkeypatch.setattr(arena_mod, "_play_two", lambda nw, nb, c: "draw")
+    monkeypatch.setattr(arena_mod, "_play_two", lambda nw, nb, c: ("draw", 1))
     a_wins, b_wins, draws = play_arena(net_a, net_b, cfg(), games=4)
     assert (a_wins, b_wins, draws) == (0, 0, 4)
 

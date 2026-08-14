@@ -205,7 +205,7 @@ def test_best_replaced_only_above_ratio(tmp_path, monkeypatch):
     t = Trainer(cfg)
 
     def fake_arena(net_a, net_b, games):
-        return (2, 0, 0)  # candidate wins 2 of 2 -> ratio 1.0
+        return (2, 0, 0, 0)  # candidate wins 2 of 2 -> ratio 1.0
 
     monkeypatch.setattr(t, "_arena", fake_arena)
     t._maybe_update_best(1)
@@ -227,7 +227,7 @@ def test_best_not_replaced_when_losing(tmp_path, monkeypatch):
     t = Trainer(cfg)
 
     def fake_arena(net_a, net_b, games):
-        return (0, 2, 0)  # candidate loses
+        return (0, 2, 0, 0)  # candidate loses
 
     monkeypatch.setattr(t, "_arena", fake_arena)
     t._maybe_update_best(1)
@@ -243,7 +243,7 @@ def test_best_replaced_with_draws_scored_half(tmp_path, monkeypatch):
     t = Trainer(cfg)
 
     def fake_arena(net_a, net_b, games):
-        return (1, 0, 1)  # ratio = (1 + 0.5) / 2 = 0.75
+        return (1, 0, 1, 0)  # ratio = (1 + 0.5) / 2 = 0.75
 
     monkeypatch.setattr(t, "_arena", fake_arena)
     t._maybe_update_best(1)
@@ -257,21 +257,21 @@ def test_best_not_replaced_when_draws_dilute_below_ratio(tmp_path, monkeypatch):
     t = Trainer(cfg)
 
     def fake_arena(net_a, net_b, games):
-        return (12, 8, 10)  # ratio = (12 + 5) / 30 = 0.567 -> promotes
+        return (12, 8, 10, 0)  # ratio = (12 + 5) / 30 = 0.567 -> promotes
 
     monkeypatch.setattr(t, "_arena", fake_arena)
     t._maybe_update_best(1)
     assert (tmp_path / "best.pt").exists()
 
     def fake_arena_short(net_a, net_b, games):
-        return (11, 8, 11)  # ratio = (11 + 5.5) / 30 = 0.55 -> promotes (>=)
+        return (11, 8, 11, 0)  # ratio = (11 + 5.5) / 30 = 0.55 -> promotes (>=)
 
     monkeypatch.setattr(t, "_arena", fake_arena_short)
     t._maybe_update_best(2)
     assert t.best_iteration == 2
 
     def fake_arena_fail(net_a, net_b, games):
-        return (11, 9, 10)  # ratio = (11 + 5) / 30 = 0.533 -> no promote
+        return (11, 9, 10, 0)  # ratio = (11 + 5) / 30 = 0.533 -> no promote
 
     monkeypatch.setattr(t, "_arena", fake_arena_fail)
     t._maybe_update_best(3)
@@ -403,8 +403,8 @@ def test_save_is_atomic_on_failure(tmp_path, monkeypatch):
 def test_optimize_skipped_when_buffer_empty(tmp_path, capsys):
     cfg = make_config(tmp_path, batch_size=8)
     t = Trainer(cfg)
-    loss = t._optimize()  # no self-play was ever run
-    assert math.isnan(loss)
+    loss, pol, val = t._optimize()  # no self-play was ever run
+    assert math.isnan(loss) and math.isnan(pol) and math.isnan(val)
     out, err = capsys.readouterr()
     assert "skipping optimize" in out + err
 
@@ -429,6 +429,7 @@ def test_config_loads_from_toml():
     cfg = load_config("config.toml")
     assert cfg.network.input_channels == 16
     assert cfg.network.blocks == 5
-    assert cfg.mcts.simulations == 200
+    assert cfg.mcts.simulations == 400
     assert cfg.training.selfplay_games == 100
     assert cfg.training.workers == 8
+    assert cfg.training.pretrain_games == 2000

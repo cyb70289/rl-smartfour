@@ -12,7 +12,7 @@ value_channels = 16   # value head conv width
 value_fc = 64         # value head hidden layer
 
 [mcts]
-simulations = 200     # tree searches per move during training/eval
+simulations = 400     # tree searches per move during training/eval
 c_puct = 2.0
 dirichlet_alpha = 0.3 # noise concentration per legal action (~25 actions)
 dirichlet_epsilon = 0.25
@@ -34,3 +34,6 @@ eval_games = 40       # arena games vs best checkpoint
 arena_win_ratio = 0.55    # fraction of wins required to replace best
 checkpoint_dir = "checkpoints"
 seed = 0
+pretrain_games = 2000  # value-head bootstrap on random-rollout outcomes
+pretrain_epochs = 8
+pretrain_lr = 0.001

@@ -40,6 +40,12 @@ class TrainingConfig:
     arena_win_ratio: float = 0.55
     checkpoint_dir: str = "checkpoints"
     seed: int = 0
+    # Value-head bootstrap on random-rollout outcomes, run once for fresh
+    # starts: a random value head leaves PUCT with no q-signal, so the search
+    # fills breadth-first and freezes at ~3 plies at any sim budget.
+    pretrain_games: int = 0       # 0 = disabled
+    pretrain_epochs: int = 8
+    pretrain_lr: float = 0.001
 
 
 @dataclass(frozen=True)

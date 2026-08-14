@@ -110,15 +110,21 @@ def test_selfplay_worker_plays_assigned_games():
     )
     p.start()
     received = []
+    stats_received = []
     for _ in range(2):
         msg = q.get(timeout=120)
         assert not (isinstance(msg, tuple) and msg and msg[0] == "__worker_error__"), msg
-        received.append(samples_from_ipc(msg))
+        assert isinstance(msg, tuple) and len(msg) == 2, "worker must ship (samples, stats)"
+        received.append(samples_from_ipc(msg[0]))
+        stats_received.append(msg[1])
     p.join(timeout=120)
     assert p.exitcode == 0
     assert len(received) == 2
-    for samples in received:
+    for samples, stats in zip(received, stats_received):
         check_samples(samples)
+        assert stats["plies"] == len(samples)
+        assert stats["winner"] in ("white", "black", "draw")
+        assert len(stats["sample_hashes"]) == len(samples)
 
 
 def test_selfplay_worker_reports_failure_in_band():

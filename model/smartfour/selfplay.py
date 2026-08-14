@@ -16,36 +16,88 @@ import signal
 import torch
 
 from .config import MCTSConfig, NetworkConfig
+from .diagnostics import tensor_hash
 from .encode import action_to_xyz, encode
 from .game import BLACK, WHITE, GameState, apply_move, initial_state, is_terminal, terminal_value
 from .mcts import MCTS
 from .network import ResNet
 
 
-def play_game(net, mcts_cfg, temperature_threshold: int, start_state: GameState | None = None):
+def play_game(net, mcts_cfg, temperature_threshold: int, start_state: GameState | None = None,
+              stats_out: dict | None = None):
     """Play one self-play game with dirichlet noise and temperature scheduling.
 
     temperature_threshold: plies below it use tau=1 (sample from visit
     counts), the rest use tau=0 (argmax).
+
+    When stats_out is a dict, it is filled with per-game diagnostics (see
+    diagnostics.aggregate_games for the schema).
     """
     state = start_state if start_state is not None else initial_state()
     mcts = MCTS(net, mcts_cfg)
     samples = []
+    stats = {
+        "plies": 0, "winner": "draw",
+        "state_hashes": [], "sample_hashes": [],
+        "root_values": [], "net_policy_entropies": [], "root_entropies": [],
+        "root_widths": [], "chosen_probs": [], "depths": [],
+        "max_depth": 0,
+        "leaf_distinct_mean": 0.0, "terminal_hits": 0,
+        "nodes_mean": 0.0, "net_forwards_mean": 0.0,
+        "blocked_drains": 0,
+        "value_align": 0.0, "value_cal": 0.0,
+        "leaf_total": 0, "nodes_total": 0, "forwards_total": 0,
+    }
+    hashes = set()
     while not is_terminal(state):
         ply = len(samples)
         temperature = 1.0 if ply < temperature_threshold else 0.0
         pi, chosen, _ = mcts.root_policy(state, root_noise=True, temperature=temperature)
-        samples.append((encode(state), pi, state.current, 0.0))
+        s = mcts.last_stats
+        ten = encode(state)
+        samples.append((ten, pi, state.current, 0.0))
+        stats["sample_hashes"].append(tensor_hash(ten))
+        stats["root_values"].append(s["root_value"])
+        stats["net_policy_entropies"].append(s["root_policy_entropy"])
+        stats["root_entropies"].append(s["root_entropy"])
+        stats["root_widths"].append(s["root_width"])
+        stats["chosen_probs"].append(s["chosen_prob"])
+        stats["depths"].append(s["depth_mean"])
+        stats["max_depth"] = max(stats["max_depth"], s["max_depth"])
+        stats["leaf_total"] += s["leaf_distinct"]
+        stats["terminal_hits"] += s["terminal_hits"]
+        stats["nodes_total"] += s["nodes"]
+        stats["forwards_total"] += s["net_forwards"]
+        stats["blocked_drains"] += s["blocked_drains"]
+        hashes.update(s["node_hashes"])
         x, z, _y = action_to_xyz(chosen)
         state = apply_move(state, x, z)
+
+    n = max(len(samples), 1)
+    stats["plies"] = len(samples)
+    stats["state_hashes"] = sorted(hashes)
+    stats["leaf_distinct_mean"] = stats.pop("leaf_total") / n
+    stats["nodes_mean"] = stats.pop("nodes_total") / n
+    stats["net_forwards_mean"] = stats.pop("forwards_total") / n
 
     # Outcome from white's perspective, then flip per stored player.
     winner = state.winner
     z_white = 1.0 if winner == WHITE else (-1.0 if winner == BLACK else 0.0)
+    stats["winner"] = "white" if winner == WHITE else ("black" if winner == BLACK else "draw")
     labeled = []
-    for s, pi, player, _ in samples:
+    align = []
+    cal = []
+    for i, (s, pi, player, _) in enumerate(samples):
         z = z_white if player == WHITE else -z_white
         labeled.append((s, pi, player, z))
+        v = stats["root_values"][i]
+        align.append(v * z)
+        cal.append(abs(v - z))
+    if samples:
+        stats["value_align"] = sum(align) / len(samples)
+        stats["value_cal"] = sum(cal) / len(samples)
+    if stats_out is not None:
+        stats_out.update(stats)
     return labeled, winner
 
 
@@ -109,13 +161,13 @@ def selfplay_worker(net_state, net_cfg: NetworkConfig, mcts_cfg: MCTSConfig,
         net.load_state_dict(net_state)
         net.eval()
         for _ in range(games):
+            stats: dict = {}
             samples, _winner = play_game(
-                net, mcts_cfg, temperature_threshold
+                net, mcts_cfg, temperature_threshold, stats_out=stats
             )
-            out_q.put(samples_to_ipc(samples))
+            out_q.put((samples_to_ipc(samples), stats))
     except Exception as exc:  # noqa: BLE001 — must never take the parent down
         out_q.put(("__worker_error__", f"{type(exc).__name__}: {exc}"))
-
 
 def worker_num_threads(workers: int) -> int:
     """Per-worker torch thread count.

@@ -27,18 +27,20 @@ def random_move(state, rng: random.Random | None = None):
 
 
 def _play_two(net_white, net_black, mcts_cfg):
-    """Greedy MCTS game (no noise, temperature 0). Returns the winner color."""
+    """Greedy MCTS game (no noise, temperature 0). Returns (winner, plies)."""
     white_mcts = MCTS(net_white, mcts_cfg)
     black_mcts = MCTS(net_black, mcts_cfg)
     state = initial_state()
+    plies = 0
     while not is_terminal(state):
         mcts = white_mcts if state.current == WHITE else black_mcts
         _pi, chosen, _root = mcts.root_policy(state, root_noise=False, temperature=0.0)
         x, z, _y = action_to_xyz(chosen)
         state = apply_move(state, x, z)
+        plies += 1
     if state.winner == DRAW:
-        return DRAW
-    return WHITE if state.winner == WHITE else BLACK
+        return DRAW, plies
+    return (WHITE if state.winner == WHITE else BLACK), plies
 
 
 def _result_in_a_frame(result, a_is_white: bool):
@@ -54,19 +56,20 @@ def _result_in_a_frame(result, a_is_white: bool):
     return BLACK if result == WHITE else WHITE
 
 
-def play_arena(net_a, net_b, mcts_cfg, games: int, progress=None):
+def play_arena(net_a, net_b, mcts_cfg, games: int, progress=None, plies_out=None):
     """Pit net_a against net_b over `games` games, alternating colors.
 
     Returns (a_wins, b_wins, draws) counted from net_a's perspective.
     `progress`, if given, is called with no arguments after each game.
+    `plies_out`, if given, is a list receiving each game's ply count.
     """
     a_wins = b_wins = draws = 0
     for i in range(games):
         a_is_white = i % 2 == 0
         if a_is_white:
-            result = _play_two(net_a, net_b, mcts_cfg)
+            result, plies = _play_two(net_a, net_b, mcts_cfg)
         else:
-            result = _play_two(net_b, net_a, mcts_cfg)
+            result, plies = _play_two(net_b, net_a, mcts_cfg)
         result = _result_in_a_frame(result, a_is_white)
         if result == DRAW:
             draws += 1
@@ -74,10 +77,11 @@ def play_arena(net_a, net_b, mcts_cfg, games: int, progress=None):
             a_wins += 1
         else:
             b_wins += 1
+        if plies_out is not None:
+            plies_out.append(plies)
         if progress is not None:
             progress()
     return a_wins, b_wins, draws
-
 
 def arena_worker(net_a_state, net_b_state, net_cfg: NetworkConfig, mcts_cfg: MCTSConfig,
                  games: int, start: int, seed: int, num_threads, out_q) -> None:
@@ -105,10 +109,10 @@ def arena_worker(net_a_state, net_b_state, net_cfg: NetworkConfig, mcts_cfg: MCT
         for j in range(games):
             a_is_white = (start + j) % 2 == 0
             if a_is_white:
-                result = _play_two(net_a, net_b, mcts_cfg)
+                result, plies = _play_two(net_a, net_b, mcts_cfg)
             else:
-                result = _play_two(net_b, net_a, mcts_cfg)
-            out_q.put(_result_in_a_frame(result, a_is_white))
+                result, plies = _play_two(net_b, net_a, mcts_cfg)
+            out_q.put((_result_in_a_frame(result, a_is_white), plies))
     except Exception as exc:  # noqa: BLE001 — must never take the parent down
         out_q.put(("__worker_error__", f"{type(exc).__name__}: {exc}"))
 
