@@ -126,10 +126,20 @@ value never improves — a self-reinforcing collapse into short races.
 `pretrain_games > 0` breaks the cycle once, before iteration 1: `pretrain.py`
 plays that many random games and labels the states in the last `tail_plies`
 plies of each game with the average of `rollouts` (=20) random completions.
-The value head (plus the shared trunk; the policy head is frozen) then trains
-`pretrain_epochs` epochs of MSE against those soft labels. The result is a
-value function that already knows live threats, so MCTS concentrates visits
-and the policy can learn real tactics from the very first iteration.
+The value head (plus the shared trunk; the policy head's weights are frozen)
+then trains `pretrain_epochs` epochs of MSE against those soft labels. The
+result is a value function that already knows live threats, so MCTS
+concentrates visits and the policy can learn real tactics from the very
+first iteration.
+
+Performance: rollout collection is pure-Python game play, so it parallelizes
+across `workers` processes (independent sub-seed streams — labels are
+distribution-equal to a sequential run, not bit-equal); the training loop
+runs on the selected device (samples move once, batches slice on-device,
+D4 augmentation stays the per-batch CPU transform). At the default
+`pretrain_games = 20000` / `pretrain_epochs = 64` this is roughly
+collection ~1 min + training ~20 min on an M4 (MPS) vs ~1.8 h all-CPU
+before.
 
 Diagnostics
 -----------

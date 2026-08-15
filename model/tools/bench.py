@@ -111,6 +111,44 @@ def bench_optimize(cfg, device, n_batches=40):
     return n_batches / dt, dt / n_batches * 1000
 
 
+def bench_pretrain(cfg, device, games, workers, epochs=2):
+    """The real pretrain pass (collect + value-head training) at reduced
+    epochs. Reports collection seconds, training ms/batch, total samples."""
+    from smartfour.pretrain import (
+        collect_rollout_samples,
+        collect_rollout_samples_parallel,
+        pretrain_value,
+    )
+
+    t0 = time.perf_counter()
+    seq_states, seq_zs = collect_rollout_samples(games, seed=991)
+    seq_s = time.perf_counter() - t0
+    t0 = time.perf_counter()
+    par_states, par_zs = collect_rollout_samples_parallel(games, 991, workers)
+    par_s = time.perf_counter() - t0
+
+    net = ResNet(cfg.network).to(device)
+    net.train()
+    t0 = time.perf_counter()
+    mse = pretrain_value(
+        net, games, epochs, cfg.training.batch_size, cfg.training.pretrain_lr,
+        cfg.training.weight_decay, seed=991, device=device,
+        collect_workers=workers,
+    )
+    train_s = time.perf_counter() - t0
+    n = len(par_states)
+    n_batches = max(1, n // cfg.training.batch_size) * epochs
+    return {
+        "games": games,
+        "samples": n,
+        "collect_sequential_s": seq_s,
+        "collect_parallel_s": par_s,
+        "train_s": train_s,
+        "train_ms_per_batch": train_s / n_batches * 1000,
+        "final_mse": mse,
+    }
+
+
 # ------------------------------------------------------------------ self-play
 
 def _bench_selfplay_worker(net_state, net_cfg, mcts_cfg, tt, games, seed,
@@ -283,9 +321,11 @@ def main():
     ap.add_argument("--config", default="config.toml")
     ap.add_argument("--device", default=None,
                     help="cpu | mps | cuda | auto (default: from config)")
-    ap.add_argument("--phases", default="net,selfplay,optimize,arena")
+    ap.add_argument("--phases", default="net,selfplay,optimize,arena,pretrain")
     ap.add_argument("--selfplay-games", type=int, default=None)
     ap.add_argument("--arena-games", type=int, default=None)
+    ap.add_argument("--pretrain-games", type=int, default=200,
+                    help="games for the pretrain collection benchmark")
     ap.add_argument("--workers", type=int, default=None,
                     help="override training.workers for self-play/arena")
     ap.add_argument("--json", action="store_true", help="emit JSON results")
@@ -345,6 +385,16 @@ def main():
                 "games_per_s": gps, "plies": plies, "seconds": dt,
                 "games": ar_games,
             }
+        if "pretrain" in phases:
+            pt = bench_pretrain(cfg, device, args.pretrain_games, workers)
+            print("[pretrain]")
+            print(_fmt_row("collect sequential", f"{pt['collect_sequential_s']:8.1f}", " s")
+                  + f"   {pt['samples']} samples / {pt['games']} games")
+            print(_fmt_row("collect parallel", f"{pt['collect_parallel_s']:8.1f}", " s")
+                  + f"   {pt['collect_sequential_s'] / max(pt['collect_parallel_s'], 1e-9):.1f}x")
+            print(_fmt_row("train", f"{pt['train_ms_per_batch']:8.1f}", " ms/batch")
+                  + f"   total {pt['train_s']:.1f}s, final MSE {pt['final_mse']:.4f}")
+            results["phases"]["pretrain"] = pt
     finally:
         if server is not None:
             server.shutdown()

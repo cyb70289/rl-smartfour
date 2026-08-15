@@ -767,12 +767,11 @@ def main(argv=None) -> None:
         tqdm.write("Pretraining value head on random-rollout outcomes...")
         t0 = time.perf_counter()
         with _tqdm(desc="pretrain value", unit="batch", leave=False) as bar:
-            # Pretrain runs on a CPU copy (one-time, cheap); weights copy back.
-            cpu_net = ResNet(cfg.network)
-            cpu_net.load_state_dict({k: v.cpu() for k, v in trainer.net.state_dict().items()})
-            cpu_net.train()
+            # Training runs on the trainer's device (net already there);
+            # rollout collection parallelizes across workers on CPU.
+            trainer.net.train()
             mse = pretrain_value(
-                cpu_net,
+                trainer.net,
                 cfg.training.pretrain_games,
                 cfg.training.pretrain_epochs,
                 cfg.training.batch_size,
@@ -780,8 +779,9 @@ def main(argv=None) -> None:
                 cfg.training.weight_decay,
                 cfg.training.seed + 12345,
                 progress=bar.update,
+                device=trainer.device,
+                collect_workers=cfg.training.workers,
             )
-            trainer.net.load_state_dict({k: v.to(trainer.device) for k, v in cpu_net.state_dict().items()})
             trainer.net.eval()
         trainer.best_net.load_state_dict(trainer.net.state_dict())
         print(f"  pretrain    done in {time.perf_counter() - t0:.0f}s,"
