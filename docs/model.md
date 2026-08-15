@@ -88,10 +88,11 @@ central server's RemoteEvaluator):
 - dirichlet noise at the root during self-play (`alpha`, `epsilon`)
 - temperature schedule: `temperature_threshold` plies with tau=1 (sample from
   visit counts), then tau=0 (argmax)
-- batched leaf evaluation (`batch_eval_size` positions per net forward) with
-  random tie-breaking among equal UCB scores; a queued leaf is skipped until
-  evaluated, and the search drains the batch and goes deeper instead of
-  piling duplicate visits onto one child
+- virtual-loss batched evaluation: each pass descends up to
+  `batch_eval_size` leaves (128 by default), charging a temporary loss
+  along pending paths so PUCT explores different lines, then evaluates
+  all of them in ONE net forward; random tie-breaking among equal UCB
+  scores; one searcher serves training and inference
 - terminal leaves short-circuit the net (no forward on game-over positions)
 
 Training
@@ -184,12 +185,8 @@ processes. On cpu each worker rebuilds the net from the current weights and
 evaluates locally; on mps/cuda the workers instead connect to the central
 inference server (see above) and evaluate remotely — tree logic local,
 forward passes centralized. Either way the worker plays its share of the
-self-play games and ships the samples back over a queue, and the trainer
-collects exactly `selfplay_games` games. The arena parallelizes the same way
-with the same `workers` count: slot 0 = candidate, slot 1 = best, colors
-alternate by global game index, per-game results ship over a queue, and the
-trainer collects exactly `eval_games` games. Training uses the sequential
-searcher; the UI uses the batched one below.
+self-play games and the trainer collects exactly `eval_games` arena games.
+The same virtual-loss searcher serves self-play, arena, and UI inference.
 
 Inference (UI path, GPU-accelerated)
 ------------------------------------
@@ -203,18 +200,11 @@ The device comes from `--device {auto,cpu,mps,cuda}` or `$SMARTFOUR_DEVICE`
 (default auto: cuda -> mps -> cpu); requesting an unavailable device is a
 hard error. The net loads onto the device once.
 
-For `simulations > 0` the agent runs the **virtual-loss batched searcher**
-(`MCTS(batched=True)`): each selection pass descends up to
-`batch_eval_size` (default 128) leaves, charging a temporary loss along
-every pending path so PUCT steers consecutive descents to different lines,
-then evaluates all pending leaves in ONE net forward (states stacked once,
-one host->device transfer, legality mask + softmax on device, one transfer
-back). Same PUCT math, priors, and net as the sequential searcher — only
-traversal order differs. At 400 sims it beat the sequential searcher 62-38
-in a 100-game arena (equal net, equal sims), and single-move latency on an
-M4 drops ~2.4-4x (e.g. 2000 sims: 1237ms CPU-sequential -> 312ms MPS).
-Training keeps the sequential searcher until the batched one is validated
-there separately.
+For `simulations > 0` the agent runs the virtual-loss searcher (above):
+one net forward per ~128-leaf pass, states stacked and masked on device.
+Measured on an M4, single-move latency drops ~2.4-4x vs the old
+sequential searcher (e.g. 2000 sims: 1237ms CPU-sequential -> 312ms MPS),
+and at 400 sims it was also stronger (62-38 over 100 games).
 
 `smartfour/worker.py` — the persistent bridge worker for the UI. It loads the
 checkpoint once (on the selected device), prints `{"ready": true, ...,

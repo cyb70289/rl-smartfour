@@ -59,9 +59,11 @@ def test_play_game_replays_to_terminal():
         x, zc, _y = action_to_xyz(a)
         state = apply_move(state, x, zc)
     z_white = 1.0 if winner == WHITE else (-1.0 if winner == BLACK else 0.0)
-    # The replay ends with the loser to move, so terminal_value (from the
-    # current player's perspective) is the negation of the winner's value.
-    assert terminal_value(state) == -z_white
+    # The winner made the last move, so the replay ends with the LOSER to
+    # move; terminal_value is the outcome from that loser's perspective,
+    # i.e. the negation of the winner's outcome.
+    winner_z = z_white if winner == WHITE else -z_white  # winner's own value
+    assert terminal_value(state) == -winner_z
 
 
 def test_terminates_quickly_with_winning_net():

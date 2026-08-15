@@ -137,7 +137,7 @@ def aggregate_games(games: list) -> dict:
         "terminal_hits_per_game": _mean([g["terminal_hits"] for g in games]),
         "nodes_per_search": _mean([g["nodes_mean"] for g in games]),
         "net_forwards_per_search": _mean([g["net_forwards_mean"] for g in games]),
-        "blocked_drains": sum(g["blocked_drains"] for g in games),
+        "batch_size_mean": _mean([g.get("batch_size_mean", 0.0) for g in games]),
         "states_per_game": _mean(per_game),
         "states_total": total_states,
         "states_distinct": len(union),
@@ -217,7 +217,7 @@ def format_lines(iteration: int, agg: dict, buf: dict, novel_frac: float,
         f"max={agg['depth']['max']} | leaves/search={f(agg['leaves_per_search'], '.1f')} "
         f"| nodes/search={f(agg['nodes_per_search'], '.1f')} "
         f"| terminal hits/game={f(agg['terminal_hits_per_game'], '.1f')} "
-        f"| blocked drains={agg['blocked_drains']}"
+        f"| batch mean={f(agg.get('batch_size_mean', 0.0), '.1f')}"
     )
     lines.append(
         f"[diag it {iteration}] mcts root width={f(agg['root_width'], '.1f')}/25 "

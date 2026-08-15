@@ -43,9 +43,10 @@ def play_game(net, mcts_cfg, temperature_threshold: int, start_state: GameState 
         "max_depth": 0,
         "leaf_distinct_mean": 0.0, "terminal_hits": 0,
         "nodes_mean": 0.0, "net_forwards_mean": 0.0,
-        "blocked_drains": 0,
+        "batch_size_mean": 0.0,
         "value_align": 0.0, "value_cal": 0.0,
         "leaf_total": 0, "nodes_total": 0, "forwards_total": 0,
+        "batch_size_total": 0.0,
     }
     hashes = set()
     samples = []
@@ -67,8 +68,7 @@ def play_game(net, mcts_cfg, temperature_threshold: int, start_state: GameState 
         stats["leaf_total"] += s["leaf_distinct"]
         stats["terminal_hits"] += s["terminal_hits"]
         stats["nodes_total"] += s["nodes"]
-        stats["forwards_total"] += s["net_forwards"]
-        stats["blocked_drains"] += s["blocked_drains"]
+        stats["batch_size_total"] += s["batch_size_mean"]
         hashes.update(s["node_hashes"])
         x, z, _y = action_to_xyz(chosen)
         state = apply_move(state, x, z)
@@ -79,6 +79,7 @@ def play_game(net, mcts_cfg, temperature_threshold: int, start_state: GameState 
     stats["leaf_distinct_mean"] = stats.pop("leaf_total") / n
     stats["nodes_mean"] = stats.pop("nodes_total") / n
     stats["net_forwards_mean"] = stats.pop("forwards_total") / n
+    stats["batch_size_mean"] = stats.pop("batch_size_total") / n
 
     # Outcome from white's perspective, then flip per stored player.
     winner = state.winner

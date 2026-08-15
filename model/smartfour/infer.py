@@ -73,7 +73,6 @@ class SmartFourAgent:
             self.net,
             MCTSConfig(simulations=simulations, batch_eval_size=batch_eval_size),
             device=self.device,
-            batched=True,
         )
         _pi, chosen, _root = mcts.root_policy(state, root_noise=False, temperature=0.0)
         if chosen is None:

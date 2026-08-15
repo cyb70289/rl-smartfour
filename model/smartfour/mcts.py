@@ -1,14 +1,21 @@
-"""AlphaZero MCTS with batched leaf evaluation, CPU-friendly.
+"""AlphaZero MCTS with virtual-loss batched leaf evaluation.
 
 Every node stores values from its OWN perspective (the player to move at that
 node): the net evaluates the current-player encoding, priors are masked to
 legal actions, and backpropagation flips the value sign at each level.
 
+Batching: each selection pass descends up to `batch_eval_size` leaves,
+charging a temporary virtual loss along every pending path so PUCT steers
+consecutive descents to different lines, then evaluates all pending leaves
+in ONE net forward and reconciles (penalties removed, values backpropagated).
+Same PUCT math, priors, and net as the original sequential searcher; only
+traversal order differs. One searcher serves training and inference.
+
 Evaluation seam: `evaluator` maps a list of GameStates to (priors, values),
-where priors is a (N, 125) float tensor already softmaxed over each state's
-legal actions and values a (N,) float tensor. The default `LocalEvaluator`
-wraps a torch net on `device`; workers instead pass a RemoteEvaluator backed
-by the central inference server.
+where priors is an (N, 125) float tensor already softmaxed over each state's
+legal actions and values an (N,) float tensor. The default LocalEvaluator
+wraps a torch net on `device`; training workers pass a RemoteEvaluator
+backed by the central inference server.
 """
 
 import math
@@ -16,8 +23,8 @@ import math
 import torch
 
 from .config import MCTSConfig
-from .diagnostics import masked_entropy_bits, state_hash, state_key, visit_entropy_bits
-from .encode import action_mask, action_to_xyz, encode, legal_actions
+from .diagnostics import state_hash, state_key, visit_entropy_bits
+from .encode import action_to_xyz, encode, legal_actions
 from .game import apply_move, is_terminal, terminal_value
 
 NEG_INF = float("-inf")
@@ -39,8 +46,7 @@ class LocalEvaluator:
             logits, values = self.net(tensor)
             # One batched legality mask on device: channel 10+h set at
             # (x,z) iff column height is h; the flattened (5,5) plane index
-            # equals the action index y*25 + x*5 + z (same trick as the
-            # inference server).
+            # equals the action index y*25 + x*5 + z.
             mask = (tensor[:, 10:15] > 0.5).reshape(n, 125)
             logits = logits.masked_fill(
                 ~mask, torch.tensor(NEG_INF, device=logits.device)
@@ -61,11 +67,12 @@ class Node:
         self.visits = 0
         self.value_sum = 0.0
         self.terminal = None          # None | float from this node's perspective
-        self.pending = 0              # virtual-loss: visits pending this batch
+        self.pending = 0              # virtual-loss: visits pending this pass
 
     @property
     def value(self) -> float:
         return self.value_sum / self.visits if self.visits else 0.0
+
 
 class _ChildStub:
     """Unmaterialized child: only the parent's prior. Becomes a Node on
@@ -85,11 +92,9 @@ class _ChildStub:
 
 
 class MCTS:
-    def __init__(self, net, mcts_cfg: MCTSConfig, device="cpu", evaluator=None,
-                 batched: bool = False):
+    def __init__(self, net, mcts_cfg: MCTSConfig, device="cpu", evaluator=None):
         self.cfg = mcts_cfg
         self.evaluator = evaluator if evaluator is not None else LocalEvaluator(net, device)
-        self.batched = batched
         self.last_root_policy_visits = {}
         self.last_stats: dict = {}  # per-search diagnostics, JSON-safe
 
@@ -112,7 +117,6 @@ class MCTS:
             "nodes": 0,
             "net_forwards": 0,
             "batch_sizes": [],
-            "blocked_drains": 0,
             "node_hashes": set(),
             "root_value": 0.0,
             "root_policy_entropy": 0.0,
@@ -122,7 +126,7 @@ class MCTS:
             self.last_stats = {
                 "sims": 0, "depth_mean": 0.0, "max_depth": 0, "sims_done": 0,
                 "leaf_distinct": 0, "terminal_hits": 0, "nodes": 0,
-                "net_forwards": 0, "batch_size_mean": 0.0, "blocked_drains": 0,
+                "net_forwards": 0, "batch_size_mean": 0.0,
                 "n_states": 0, "node_hashes": [],
                 "root_value": 0.0, "root_policy_entropy": 0.0,
                 "root_entropy": 0.0, "root_width": 0, "chosen_prob": 0.0,
@@ -130,10 +134,7 @@ class MCTS:
             return torch.zeros(125), None, None
         stats["root_value"] = root_value
         stats["root_policy_entropy"] = policy_entropy
-        if self.batched:
-            self._run_batched(root, stats)
-        else:
-            self._run(root, stats)
+        self._run(root, stats)
         pi, chosen = self._visit_policy(root, temperature)
         legal = root.legal
         counts = torch.tensor(
@@ -158,7 +159,6 @@ class MCTS:
             "net_forwards": stats["net_forwards"],
             "batch_size_mean": (sum(stats["batch_sizes"]) / len(stats["batch_sizes"]))
             if stats["batch_sizes"] else 0.0,
-            "blocked_drains": stats["blocked_drains"],
             "n_states": len(stats["node_hashes"]),
             "node_hashes": sorted(stats["node_hashes"]),
             "root_value": stats["root_value"],
@@ -190,70 +190,20 @@ class MCTS:
         p = prior[torch.tensor(legal, dtype=torch.long)]
         return float(-(p * torch.log2(p + 1e-12)).sum())
 
-    def _run(self, root: Node, stats: dict):
-        pending_unique = {}   # id(leaf) -> leaf, for one-shot expansion
-        pending_order = []    # (path, leaf) per simulation, for backprop
-
-        def drain():
-            leaves = list(pending_unique.values())
-            priors, values = self.evaluator([leaf.state for leaf in leaves])
-            value_of = {id(leaf): float(v) for leaf, v in zip(leaves, values)}
-            leaf_idx = {id(l): i for i, l in enumerate(leaves)}
-            stats["net_forwards"] += 1
-            stats["batch_sizes"].append(len(leaves))
-            expanded = set()
-            for path, leaf in pending_order:
-                if id(leaf) not in expanded:
-                    expanded.add(id(leaf))
-                    self._expand(leaf, priors[leaf_idx[id(leaf)]], value_of[id(leaf)], stats)
-                self._backprop(path, leaf, value_of[id(leaf)])
-
-        sims = 0
-        while sims < self.cfg.simulations:
-            path, leaf, blocked = self._select(root, pending_unique)
-            if blocked:
-                # Every child of a node is already queued: expand them now so
-                # the search can go deeper instead of piling duplicate visits
-                # onto one child.
-                if pending_order:
-                    drain()
-                    pending_unique.clear()
-                    pending_order.clear()
-                    stats["blocked_drains"] += 1
-                continue  # retry this simulation against the expanded tree
-            sims += 1
-            stats["sims_done"] = sims
-            stats["depth_total"] += len(path)
-            stats["max_depth"] = max(stats["max_depth"], len(path))
-            stats["leaf_states"].add(state_key(leaf.state))
-            if leaf.terminal is not None:
-                stats["terminal_hits"] += 1
-                self._backprop(path, leaf, leaf.terminal)
-            else:
-                pending_unique.setdefault(id(leaf), leaf)
-                pending_order.append((path, leaf))
-                if len(pending_unique) >= self.cfg.batch_eval_size:
-                    drain()
-                    pending_unique.clear()
-                    pending_order.clear()
-        if pending_order:
-            drain()
-
     # Virtual-loss value charged to every node on a pending path, from that
     # node's own perspective (a pending visit looks like a certain loss).
     _VL = 1.0
 
-    def _run_batched(self, root: Node, stats: dict):
+    def _run(self, root: Node, stats: dict):
         """Virtual-loss search: each pass descends up to `target` leaves,
         charging a temporary loss along each pending path so PUCT steers the
         next descent to a different line, then evaluates all pending leaves
         in one net forward and reconciles (penalties removed, values
-        backpropagated). Same PUCT math, priors, and net as `_run`; only the
-        traversal order differs. `target` = max(batch_eval_size, 8) bounded
-        by remaining sims — small searches stay small, big searches fill
-        GPU-sized batches.
+        backpropagated). `target` = max(batch_eval_size, 8) bounded by
+        remaining sims — small searches stay small, big searches fill
+        device-sized batches.
         """
-        target = max(int(getattr(self.cfg, "batch_eval_size", 32)), 8)
+        target = max(int(self.cfg.batch_eval_size), 8)
         sims = 0
         while sims < self.cfg.simulations:
             k = min(target, self.cfg.simulations - sims)
@@ -277,7 +227,6 @@ class MCTS:
                 self._evaluate_batch(batch, stats)
                 stats["net_forwards"] += 1
                 stats["batch_sizes"].append(len(batch))
-        # (no trailing partial batch: every pass drains fully)
 
     def _descend_vl(self, root: Node):
         """One PUCT descent with virtual loss on pending paths. Returns
@@ -315,7 +264,7 @@ class MCTS:
         (from leaf's perspective)."""
         for parent, a in path:
             child = parent.children[a]
-            child.pending = getattr(child, "pending", 0) - 1
+            child.pending -= 1
         self._backprop(path, leaf, value)
 
     def _evaluate_batch(self, batch, stats: dict):
@@ -329,54 +278,6 @@ class MCTS:
                 self._expand(leaf, prior, v, stats)
             self._reconcile(path, leaf, v)
 
-    def _select(self, root: Node, pending: dict):
-        """Descend by UCB to an unexpanded leaf, skipping queued (pending) leaves.
-
-        Returns (path, leaf, blocked): blocked=True when every child of the
-        reached node is already queued, so the search cannot go deeper until
-        the pending batch is evaluated. Descending into a stub materializes
-        it (apply_move + legality + terminal check) on first visit only.
-        """
-        path = []
-        node = root
-        while node.children is not None:
-            best_score = NEG_INF
-            best = []  # actions tied for the max score
-            parent_visits = node.visits
-            for a, child in node.children.items():
-                if id(child) in pending:
-                    continue  # already queued for expansion this batch
-                q = -child.value  # child's perspective is the opponent's
-                score = q + self.cfg.c_puct * child.prior * math.sqrt(parent_visits) / (1 + child.visits)
-                if score > best_score:
-                    best_score, best = score, [a]
-                elif score == best_score:
-                    best.append(a)
-            if not best:
-                return path, node, True  # blocked: all children pending
-            # Random tie-break among equal scores (seeded via torch RNG).
-            best_a = best[int(torch.randint(len(best), (1,)).item())]
-            path.append((node, best_a))
-            node = self._materialize(node, best_a)
-        return path, node, False
-
-    def _expand(self, node: Node, prior, value: float, stats: dict | None = None):
-        if node.terminal is not None:
-            return
-        if not node.legal:
-            node.terminal = 0.0  # no legal moves: treat as a draw
-            return
-        if stats is not None:
-            stats["nodes"] += 1
-            stats["node_hashes"].add(state_hash(node.state))
-        # Lazy children: stubs carry only (state=None, prior); the child's
-        # state/legal/terminal are materialized on first descent. Unvisited
-        # children never contribute more than prior/visits to UCB, so search
-        # semantics are identical to eager expansion.
-        node.children = {}
-        for a in node.legal:
-            node.children[a] = _ChildStub(float(prior[a]))
-
     def _materialize(self, node: Node, a: int) -> Node:
         """Build the real child for action `a` from its stub."""
         child = node.children[a]
@@ -389,6 +290,23 @@ class MCTS:
             node.children[a] = real
             return real
         return child
+
+    def _expand(self, node: Node, prior, value: float, stats: dict | None = None):
+        if node.terminal is not None:
+            return
+        if not node.legal:
+            node.terminal = 0.0  # no legal moves: treat as a draw
+            return
+        if stats is not None:
+            stats["nodes"] += 1
+            stats["node_hashes"].add(state_hash(node.state))
+        # Lazy children: stubs carry only the parent's prior; the child's
+        # state/legal/terminal are materialized on first descent. Unvisited
+        # children never contribute more than prior/visits to UCB, so search
+        # semantics are identical to eager expansion.
+        node.children = {}
+        for a in node.legal:
+            node.children[a] = _ChildStub(float(prior[a]))
 
     def _backprop(self, path, node: Node, value: float):
         # node is the leaf; walk the path upward, flipping perspective each
