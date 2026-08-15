@@ -47,12 +47,18 @@ class TrainingConfig:
     pretrain_epochs: int = 8
     pretrain_lr: float = 0.001
 
+@dataclass(frozen=True)
+class DeviceConfig:
+    name: str = "auto"  # auto | cpu | mps | cuda (see smartfour.device)
+
 
 @dataclass(frozen=True)
 class Config:
     network: NetworkConfig
     mcts: MCTSConfig
     training: TrainingConfig
+    device: DeviceConfig = DeviceConfig()
+
 
 
 def load_config(path: str | Path) -> Config:
@@ -67,4 +73,5 @@ def load_config(path: str | Path) -> Config:
         network=NetworkConfig(**raw.get("network", {})),
         mcts=MCTSConfig(**raw.get("mcts", {})),
         training=training,
+        device=DeviceConfig(**raw.get("device", {})),
     )

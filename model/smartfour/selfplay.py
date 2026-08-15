@@ -24,7 +24,7 @@ from .network import ResNet
 
 
 def play_game(net, mcts_cfg, temperature_threshold: int, start_state: GameState | None = None,
-              stats_out: dict | None = None):
+              stats_out: dict | None = None, evaluator=None):
     """Play one self-play game with dirichlet noise and temperature scheduling.
 
     temperature_threshold: plies below it use tau=1 (sample from visit
@@ -34,8 +34,7 @@ def play_game(net, mcts_cfg, temperature_threshold: int, start_state: GameState 
     diagnostics.aggregate_games for the schema).
     """
     state = start_state if start_state is not None else initial_state()
-    mcts = MCTS(net, mcts_cfg)
-    samples = []
+    mcts = MCTS(net, mcts_cfg, evaluator=evaluator)
     stats = {
         "plies": 0, "winner": "draw",
         "state_hashes": [], "sample_hashes": [],
@@ -49,6 +48,7 @@ def play_game(net, mcts_cfg, temperature_threshold: int, start_state: GameState 
         "leaf_total": 0, "nodes_total": 0, "forwards_total": 0,
     }
     hashes = set()
+    samples = []
     while not is_terminal(state):
         ply = len(samples)
         temperature = 1.0 if ply < temperature_threshold else 0.0
@@ -143,16 +143,20 @@ def ignore_sigint() -> None:
 
 def selfplay_worker(net_state, net_cfg: NetworkConfig, mcts_cfg: MCTSConfig,
                     temperature_threshold: int, games: int, seed: int,
-                    num_threads, out_q) -> None:
+                    num_threads, out_q, server_addr=None) -> None:
     """Process entry point: rebuild the net, play `games` games, ship the
     samples of each game on out_q.
 
-    Errors never crash the parent: they are reported as an
+    `server_addr` set: evaluate leaves through the central inference server
+    (slot 0) instead of the local net copy (which is still built — cheap —
+    for API compatibility and as a fallback target of last resort, never
+    called). Errors never crash the parent: they are reported as an
     ('__worker_error__', message) marker so the trainer can fail fast instead
     of hanging on a missing game. `num_threads` avoids core oversubscription
     when several workers share the machine.
     """
     ignore_sigint()
+    evaluator = None
     try:
         torch.manual_seed(seed)
         if num_threads:
@@ -160,14 +164,22 @@ def selfplay_worker(net_state, net_cfg: NetworkConfig, mcts_cfg: MCTSConfig,
         net = ResNet(net_cfg)
         net.load_state_dict(net_state)
         net.eval()
+        if server_addr is not None:
+            from .inference_server import RemoteEvaluator
+            evaluator = RemoteEvaluator(server_addr, slot=0)
         for _ in range(games):
             stats: dict = {}
             samples, _winner = play_game(
-                net, mcts_cfg, temperature_threshold, stats_out=stats
+                net, mcts_cfg, temperature_threshold, stats_out=stats,
+                evaluator=evaluator,
             )
             out_q.put((samples_to_ipc(samples), stats))
     except Exception as exc:  # noqa: BLE001 — must never take the parent down
         out_q.put(("__worker_error__", f"{type(exc).__name__}: {exc}"))
+    finally:
+        if evaluator is not None:
+            evaluator.close()
+
 
 def worker_num_threads(workers: int) -> int:
     """Per-worker torch thread count.

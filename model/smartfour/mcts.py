@@ -3,16 +3,53 @@
 Every node stores values from its OWN perspective (the player to move at that
 node): the net evaluates the current-player encoding, priors are masked to
 legal actions, and backpropagation flips the value sign at each level.
+
+Evaluation seam: `evaluator` maps a list of GameStates to (priors, values),
+where priors is a (N, 125) float tensor already softmaxed over each state's
+legal actions and values a (N,) float tensor. The default `LocalEvaluator`
+wraps a torch net on `device`; workers instead pass a RemoteEvaluator backed
+by the central inference server.
 """
 
 import math
+
 import torch
 
 from .config import MCTSConfig
 from .diagnostics import masked_entropy_bits, state_hash, state_key, visit_entropy_bits
 from .encode import action_mask, action_to_xyz, encode, legal_actions
 from .game import apply_move, is_terminal, terminal_value
+
 NEG_INF = float("-inf")
+
+
+class LocalEvaluator:
+    """In-process net evaluation: (states) -> (masked priors, values)."""
+
+    def __init__(self, net, device="cpu"):
+        self.net = net
+        self.device = device
+        if hasattr(net, "eval"):
+            net.eval()
+
+    def __call__(self, states):
+        n = len(states)
+        with torch.no_grad():
+            tensor = torch.stack([encode(s) for s in states]).to(self.device)
+            logits, values = self.net(tensor)
+            priors = torch.empty((n, 125), dtype=torch.float32)
+            for i, s in enumerate(states):
+                legal = legal_actions(s)
+                mask = torch.zeros(125, dtype=torch.bool)
+                mask[torch.tensor(legal)] = True
+                masked = torch.where(
+                    mask.to(self.device),
+                    logits[i],
+                    torch.full_like(logits[i], NEG_INF),
+                )
+                priors[i] = torch.softmax(masked, dim=0).cpu()
+            vals = values.squeeze(1).cpu()
+        return priors, vals
 
 
 class Node:
@@ -20,12 +57,27 @@ class Node:
 
     def __init__(self, state, legal, prior=None):
         self.state = state
-        self.legal = legal
-        self.prior = prior          # parent's prior for this node's action
-        self.children = None        # dict[action, Node] once expanded
+        self.legal = legal            # sorted action indices, root frame
+        self.prior = prior            # parent's prior for this node's action
+        self.children = None          # dict[action, Node] once expanded
         self.visits = 0
         self.value_sum = 0.0
-        self.terminal = None        # None | float from this node's perspective
+        self.terminal = None          # None | float from this node's perspective
+
+    @property
+    def value(self) -> float:
+        return self.value_sum / self.visits if self.visits else 0.0
+
+class _ChildStub:
+    """Unmaterialized child: only the parent's prior. Becomes a Node on
+    first descent (see MCTS._materialize)."""
+    __slots__ = ("prior", "visits", "value_sum", "terminal")
+
+    def __init__(self, prior: float):
+        self.prior = prior
+        self.visits = 0
+        self.value_sum = 0.0
+        self.terminal = None
 
     @property
     def value(self) -> float:
@@ -33,12 +85,9 @@ class Node:
 
 
 class MCTS:
-    def __init__(self, net, mcts_cfg: MCTSConfig, device="cpu"):
-        self.net = net
+    def __init__(self, net, mcts_cfg: MCTSConfig, device="cpu", evaluator=None):
         self.cfg = mcts_cfg
-        self.device = device
-        if hasattr(self.net, "eval"):
-            self.net.eval()
+        self.evaluator = evaluator if evaluator is not None else LocalEvaluator(net, device)
         self.last_root_policy_visits = {}
         self.last_stats: dict = {}  # per-search diagnostics, JSON-safe
 
@@ -116,22 +165,25 @@ class MCTS:
         self.last_root_policy_visits = {a: c.visits for a, c in root.children.items()}
         return pi, chosen, root
 
-
     # ------------------------------------------------------------- internals
 
     def _build_root(self, state, root_noise: bool, stats: dict):
         legal = legal_actions(state)
         if not legal:
             return None, 0.0, 0.0
-        tensor = encode(state).unsqueeze(0)
-        with torch.no_grad():
-            logits, value = self.net(tensor)
-        policy_entropy = masked_entropy_bits(logits[0], action_mask(state))
+        priors, values = self.evaluator([state])
         node = Node(state, legal)
-        self._expand(node, logits[0], value[0, 0].item(), stats)
+        self._expand(node, priors[0], float(values[0]), stats)
+        root_value = float(values[0])
+        policy_entropy = self._policy_entropy(priors[0], legal)
         if root_noise:
             self._apply_dirichlet(node)
-        return node, value[0, 0].item(), policy_entropy
+        return node, root_value, policy_entropy
+
+    @staticmethod
+    def _policy_entropy(prior: torch.Tensor, legal) -> float:
+        p = prior[torch.tensor(legal, dtype=torch.long)]
+        return float(-(p * torch.log2(p + 1e-12)).sum())
 
     def _run(self, root: Node, stats: dict):
         pending_unique = {}   # id(leaf) -> leaf, for one-shot expansion
@@ -139,10 +191,8 @@ class MCTS:
 
         def drain():
             leaves = list(pending_unique.values())
-            tensors = torch.stack([encode(leaf.state) for leaf in leaves])
-            with torch.no_grad():
-                logits, values = self.net(tensors)
-            value_of = {id(leaf): v.item() for leaf, v in zip(leaves, values)}
+            priors, values = self.evaluator([leaf.state for leaf in leaves])
+            value_of = {id(leaf): float(v) for leaf, v in zip(leaves, values)}
             leaf_idx = {id(l): i for i, l in enumerate(leaves)}
             stats["net_forwards"] += 1
             stats["batch_sizes"].append(len(leaves))
@@ -150,7 +200,7 @@ class MCTS:
             for path, leaf in pending_order:
                 if id(leaf) not in expanded:
                     expanded.add(id(leaf))
-                    self._expand(leaf, logits[leaf_idx[id(leaf)]], value_of[id(leaf)], stats)
+                    self._expand(leaf, priors[leaf_idx[id(leaf)]], value_of[id(leaf)], stats)
                 self._backprop(path, leaf, value_of[id(leaf)])
 
         sims = 0
@@ -189,7 +239,8 @@ class MCTS:
 
         Returns (path, leaf, blocked): blocked=True when every child of the
         reached node is already queued, so the search cannot go deeper until
-        the pending batch is evaluated.
+        the pending batch is evaluated. Descending into a stub materializes
+        it (apply_move + legality + terminal check) on first visit only.
         """
         path = []
         node = root
@@ -211,10 +262,10 @@ class MCTS:
             # Random tie-break among equal scores (seeded via torch RNG).
             best_a = best[int(torch.randint(len(best), (1,)).item())]
             path.append((node, best_a))
-            node = node.children[best_a]
+            node = self._materialize(node, best_a)
         return path, node, False
 
-    def _expand(self, node: Node, logits, value: float, stats: dict | None = None):
+    def _expand(self, node: Node, prior, value: float, stats: dict | None = None):
         if node.terminal is not None:
             return
         if not node.legal:
@@ -223,18 +274,26 @@ class MCTS:
         if stats is not None:
             stats["nodes"] += 1
             stats["node_hashes"].add(state_hash(node.state))
-        masked = logits.clone()
-        mask = action_mask(node.state)
-        masked = torch.where(mask.bool(), logits, torch.full_like(logits, NEG_INF))
-        prior = torch.softmax(masked, dim=0)
+        # Lazy children: stubs carry only (state=None, prior); the child's
+        # state/legal/terminal are materialized on first descent. Unvisited
+        # children never contribute more than prior/visits to UCB, so search
+        # semantics are identical to eager expansion.
         node.children = {}
         for a in node.legal:
+            node.children[a] = _ChildStub(float(prior[a]))
+
+    def _materialize(self, node: Node, a: int) -> Node:
+        """Build the real child for action `a` from its stub."""
+        child = node.children[a]
+        if isinstance(child, _ChildStub):
             x, z, _y = action_to_xyz(a)
             child_state = apply_move(node.state, x, z)
-            child = Node(child_state, legal_actions(child_state), prior=float(prior[a]))
+            real = Node(child_state, legal_actions(child_state), prior=child.prior)
             if is_terminal(child_state):
-                child.terminal = terminal_value(child_state)
-            node.children[a] = child
+                real.terminal = terminal_value(child_state)
+            node.children[a] = real
+            return real
+        return child
 
     def _backprop(self, path, node: Node, value: float):
         # node is the leaf; walk the path upward, flipping perspective each

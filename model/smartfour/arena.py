@@ -26,10 +26,10 @@ def random_move(state, rng: random.Random | None = None):
     return rng.choice(moves) if rng else random.choice(moves)
 
 
-def _play_two(net_white, net_black, mcts_cfg):
+def _play_two(net_white, net_black, mcts_cfg, evaluator_white=None, evaluator_black=None):
     """Greedy MCTS game (no noise, temperature 0). Returns (winner, plies)."""
-    white_mcts = MCTS(net_white, mcts_cfg)
-    black_mcts = MCTS(net_black, mcts_cfg)
+    white_mcts = MCTS(net_white, mcts_cfg, evaluator=evaluator_white)
+    black_mcts = MCTS(net_black, mcts_cfg, evaluator=evaluator_black)
     state = initial_state()
     plies = 0
     while not is_terminal(state):
@@ -84,18 +84,22 @@ def play_arena(net_a, net_b, mcts_cfg, games: int, progress=None, plies_out=None
     return a_wins, b_wins, draws
 
 def arena_worker(net_a_state, net_b_state, net_cfg: NetworkConfig, mcts_cfg: MCTSConfig,
-                 games: int, start: int, seed: int, num_threads, out_q) -> None:
+                 games: int, start: int, seed: int, num_threads, out_q,
+                 server_addr=None) -> None:
     """Process entry point: rebuild both nets, play `games` arena games.
 
-    Color alternation continues from global game index `start`, so each
-    worker follows the same parity schedule as a sequential run. Each result
-    is put on out_q in net_a's frame (WHITE / BLACK / DRAW). Errors never
-    crash the parent: they are reported as an ('__worker_error__', message)
-    marker so the trainer can fail fast instead of hanging on a missing game.
-    `num_threads` avoids core oversubscription when several workers share the
-    machine.
+    `server_addr` set: evaluate through the central inference server, slot 0
+    = net_a, slot 1 = net_b (colors map per game). Color alternation
+    continues from global game index `start`, so each worker follows the same
+    parity schedule as a sequential run. Each result is put on out_q in
+    net_a's frame (WHITE / BLACK / DRAW). Errors never crash the parent:
+    they are reported as an ('__worker_error__', message) marker so the
+    trainer can fail fast instead of hanging on a missing game.
+    `num_threads` avoids core oversubscription when several workers share
+    the machine.
     """
     ignore_sigint()
+    ev_a = ev_b = None
     try:
         torch.manual_seed(seed)
         if num_threads:
@@ -106,15 +110,24 @@ def arena_worker(net_a_state, net_b_state, net_cfg: NetworkConfig, mcts_cfg: MCT
         net_b = ResNet(net_cfg)
         net_b.load_state_dict(net_b_state)
         net_b.eval()
+        if server_addr is not None:
+            from .inference_server import RemoteEvaluator
+            ev_a = RemoteEvaluator(server_addr, slot=0)
+            ev_b = RemoteEvaluator(server_addr, slot=1)
         for j in range(games):
             a_is_white = (start + j) % 2 == 0
             if a_is_white:
-                result, plies = _play_two(net_a, net_b, mcts_cfg)
+                result, plies = _play_two(net_a, net_b, mcts_cfg, ev_a, ev_b)
             else:
-                result, plies = _play_two(net_b, net_a, mcts_cfg)
+                result, plies = _play_two(net_b, net_a, mcts_cfg, ev_b, ev_a)
             out_q.put((_result_in_a_frame(result, a_is_white), plies))
     except Exception as exc:  # noqa: BLE001 — must never take the parent down
         out_q.put(("__worker_error__", f"{type(exc).__name__}: {exc}"))
+    finally:
+        if ev_a is not None:
+            ev_a.close()
+        if ev_b is not None:
+            ev_b.close()
 
 
 def play_vs_random(net, mcts_cfg, games: int, seed: int = 0):

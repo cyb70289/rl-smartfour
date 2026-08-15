@@ -16,8 +16,10 @@ and stack up to five high; first to line up four own pieces in 3D space wins
 ## Model
 
 AlphaZero-style training and inference for smart-four (resnet policy/value +
-MCTS), all CPU. Self-play and the arena can parallelize across `workers`
-processes (see [`docs/model.md`](docs/model.md) for full command line).
+MCTS), CPU or GPU (Metal/CUDA) — self-play and arena leaf evaluation is
+centralized on one accelerator process, optimization runs on the device.
+Self-play and the arena parallelize across `workers` processes (see
+[`docs/model.md`](docs/model.md) for full command line).
 
 Quick steps to train the model:
 

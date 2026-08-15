@@ -11,31 +11,35 @@ Policy actions are indexed a = y * 25 + x * 5 + z (plane-major, 125 total).
 
 import torch
 
-from .game import BOARD_SIZE, STACK_HEIGHT, is_legal, other, stack_height
+from .game import _HEIGHTS, BOARD_SIZE, STACK_HEIGHT, other, stack_height, WHITE
 
 N_CHANNELS = 16
 TOTAL_PIECES = 64
-PLANES = 25  # 5 x 5
+PLANES = BOARD_SIZE * BOARD_SIZE  # 25
 
 
 def encode(state) -> torch.Tensor:
     """Encode a game state as a (16, 5, 5) float tensor."""
-    grid = state.grid
-    cur, opp = state.current, other(state.current)
+    cur = state.current
     t = torch.zeros((N_CHANNELS, BOARD_SIZE, BOARD_SIZE), dtype=torch.float32)
+    # Player planes by height: t[y][x][z] = 1 where that player occupies the cell.
+    own = state.white if cur == WHITE else state.black
+    opp = state.black if cur == WHITE else state.white
     for x in range(BOARD_SIZE):
         for z in range(BOARD_SIZE):
-            col = grid[x][z]
+            shift = x * 25 + z * 5
+            own_col = (own >> shift) & 0b11111
+            opp_col = (opp >> shift) & 0b11111
             for y in range(STACK_HEIGHT):
-                p = col[y]
-                if p == cur:
+                b = 1 << y
+                if own_col & b:
                     t[y][x][z] = 1.0
-                elif p == opp:
+                elif opp_col & b:
                     t[5 + y][x][z] = 1.0
-            h = stack_height(grid, x, z)
+            h = _HEIGHTS[(own_col | opp_col)]
             if h < STACK_HEIGHT:
                 t[10 + h][x][z] = 1.0
-    remaining = state.pieces_left[state.current] + state.pieces_left[other(state.current)]
+    remaining = state.pieces_left[cur] + state.pieces_left[other(cur)]
     t[15].fill_(remaining / TOTAL_PIECES)
     return t
 
@@ -49,14 +53,20 @@ def action_to_xyz(a: int):
     x, z = divmod(r, BOARD_SIZE)
     return x, z, y
 
-
 def legal_actions(state) -> list:
     """Action indices of every legal move (one per legal column, at its top)."""
+    if state.winner is not None or state.pieces_left[state.current] <= 0:
+        return []
+    occ = state.white | state.black
     out = []
+    base = 0
     for x in range(BOARD_SIZE):
         for z in range(BOARD_SIZE):
-            if is_legal(state, x, z):
-                out.append(xyz_to_action(x, z, stack_height(state.grid, x, z)))
+            h = _HEIGHTS[(occ >> base) & 0b11111]
+            if h < STACK_HEIGHT:
+                # action = y*25 + x*5 + z (plane-major)
+                out.append(h * PLANES + x * BOARD_SIZE + z)
+            base += 5
     return out
 
 
@@ -66,7 +76,6 @@ def action_mask(state) -> torch.Tensor:
     for a in legal_actions(state):
         mask[a] = 1.0
     return mask
-
 
 # --------------------------------------------------------------------- D4 group
 _D4_PERMS = None  # cached output of d4_perms(); constant after first call

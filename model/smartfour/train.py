@@ -37,8 +37,9 @@ import torch
 from tqdm import tqdm
 
 from .arena import arena_worker, play_arena
-from .config import Config, load_config
 from .diagnostics import aggregate_games, buffer_stats, format_lines
+from .device import resolve_device, VALID_DEVICES
+from .config import Config, load_config
 from .encode import apply_d4, apply_d4_policy, d4_perms
 from .game import DRAW, WHITE
 from .network import ResNet, loss_components
@@ -77,6 +78,25 @@ def plys_postfix(plies: int, games: int) -> str:
     stored `len(samples)` positions ran exactly that many plies.
     """
     return f"{plies / games:.0f} plys/game" if games else "0 plys/game"
+
+
+def _cpu_optim_state(state: dict) -> dict:
+    """Optimizer state with every tensor moved to CPU (portable checkpoints)."""
+    out = {}
+    for k, v in state.items():
+        if k == "state":
+            out[k] = {
+                pid: {
+                    pk: pv.cpu() if isinstance(pv, torch.Tensor) else pv
+                    for pk, pv in pstate.items()
+                }
+                for pid, pstate in v.items()
+            }
+        elif k == "param_groups":
+            out[k] = v
+        else:
+            out[k] = v
+    return out
 
 
 # ------------------------------------------------------------- checkpoint I/O
@@ -227,6 +247,7 @@ class Trainer:
         self.checkpoint_dir = Path(cfg.training.checkpoint_dir)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         self._buf_hashes: set = set()  # tensor hashes of states pushed this run
+        self.server = None          # InferenceServerHandle when accelerator-backed
 
     # ------------------------------------------------------------- internals
 
@@ -262,7 +283,7 @@ class Trainer:
         """
         ctx = multiprocessing.get_context("spawn")
         out_q = ctx.Queue()
-        net_state = net.state_dict()
+        net_state = {k: v.cpu() for k, v in net.state_dict().items()}
         num_threads = worker_num_threads(workers)
         procs = []
         try:
@@ -275,6 +296,7 @@ class Trainer:
                         net_state, self.cfg.network, self.cfg.mcts,
                         self.cfg.mcts.temperature_threshold, n,
                         self.cfg.training.seed + i + 1, num_threads, out_q,
+                        self.server.address if self.server else None,
                     ),
                     daemon=True,
                 )
@@ -362,6 +384,9 @@ class Trainer:
                         self.cfg.training.batch_size,
                         augment=self.cfg.training.symmetry_augment,
                     )
+                    s = s.to(self.device)
+                    pi = pi.to(self.device)
+                    z = z.to(self.device)
                     logits, value = self.net(s)
                     pol, val, loss = loss_components(logits, value, pi, z)
                     self.optimizer.zero_grad()
@@ -405,8 +430,8 @@ class Trainer:
         """
         ctx = multiprocessing.get_context("spawn")
         out_q = ctx.Queue()
-        net_a_state = net_a.state_dict()
-        net_b_state = net_b.state_dict()
+        net_a_state = {k: v.cpu() for k, v in net_a.state_dict().items()}
+        net_b_state = {k: v.cpu() for k, v in net_b.state_dict().items()}
         num_threads = worker_num_threads(workers)
         procs = []
         start = 0
@@ -419,6 +444,7 @@ class Trainer:
                     args=(
                         net_a_state, net_b_state, self.cfg.network, self.cfg.mcts,
                         n, start, self.cfg.training.seed + i + 1, num_threads, out_q,
+                        self.server.address if self.server else None,
                     ),
                     daemon=True,
                 )
@@ -507,18 +533,20 @@ class Trainer:
             {
                 "iteration": self.best_iteration,
                 "network": asdict(self.cfg.network),
-                "net_state": self.best_net.state_dict(),
+                "net_state": {k: v.cpu() for k, v in self.best_net.state_dict().items()},
             },
             self.checkpoint_dir / "best.pt",
         )
 
     def _payload(self) -> dict:
+        """Checkpoint payload with device-normalized (CPU) tensors, so a
+        checkpoint written on mps/cuda loads on any device."""
         return {
             "iteration": self.iteration,
             "network": asdict(self.cfg.network),
-            "net_state": self.net.state_dict(),
-            "optimizer_state": self.optimizer.state_dict(),
-            "best_net_state": self.best_net.state_dict(),
+            "net_state": {k: v.cpu() for k, v in self.net.state_dict().items()},
+            "optimizer_state": _cpu_optim_state(self.optimizer.state_dict()),
+            "best_net_state": {k: v.cpu() for k, v in self.best_net.state_dict().items()},
             "best_iteration": self.best_iteration,
             "buffer": self.buffer.state(),
         }
@@ -556,13 +584,19 @@ class Trainer:
         self.best_net.load_state_dict(payload["best_net_state"])
         self.best_iteration = payload["best_iteration"]
 
-    # ------------------------------------------------------------- driving
-
     def train_iteration(self) -> dict:
         current = self.iteration + 1
+        if self.server is not None:
+            # Self-play evaluates the current net (slot 0).
+            self.server.set_weights(0, self.net.state_dict())
         game_stats = self._selfplay(self.net)
         self._selfplay_diag(current, game_stats)
         loss_mean, policy_loss, value_loss = self._optimize()
+        if self.server is not None:
+            # Arena: candidate (slot 0) vs best (slot 1). Workers are dead
+            # between phases, so no in-flight request can observe the swap.
+            self.server.set_weights(0, self.net.state_dict())
+            self.server.set_weights(1, self.best_net.state_dict())
         arena = self._maybe_update_best(current)
         self.iteration = current  # only a fully completed iteration counts
         self.save_checkpoint(self.checkpoint_dir / "latest.pt")
@@ -608,27 +642,46 @@ class Trainer:
     def train(self, target: int | None) -> list:
         """Run iterations until `target` (inclusive), or forever when None.
 
-        Returns per-iteration stats dicts.
+        Starts the central inference server first when the resolved device
+        is an accelerator (mps/cuda); it survives across iterations and
+        receives fresh weights at each phase boundary. Returns per-iteration
+        stats dicts.
         """
         stats = []
-        remaining = None if target is None else target - self.iteration
-        with _tqdm(total=remaining, desc="iterations", unit="iter") as bar:
-            while target is None or self.iteration < target:
-                t0 = time.perf_counter()
-                stats.append(self.train_iteration())
-                s = stats[-1]
-                s["elapsed"] = time.perf_counter() - t0
-                bar.update(1)
-                tqdm.write(
-                    f"iter {s['iteration']:3d}  loss {s['loss_mean']:.4f}"
-                    f" (pol {s['policy_loss']:.3f} val {s['value_loss']:.3f})  "
-                    f"buffer {s['buffer_size']}  "
-                    f"arena {s['arena_wins']}W/{s['arena_losses']}L/{s['arena_draws']}D"
-                    f" ({s['arena_ratio']:.2f}) "
-                    f"{s['arena_plies'] // max(1, s['arena_wins'] + s['arena_losses'] + s['arena_draws'])}ply/g  "
-                    f"{'BEST ' if s['improved'] else ''}"
-                    f"[{s['elapsed']:.1f}s]"
-                )
+        if self.device in ("mps", "cuda"):
+            from .inference_server import InferenceServerHandle
+            self.server = InferenceServerHandle(
+                self.cfg.network, self.device, slots=2,
+                num_threads=worker_num_threads(2),
+            ).start(
+                initial_states=[
+                    {k: v.cpu() for k, v in self.net.state_dict().items()},
+                    {k: v.cpu() for k, v in self.best_net.state_dict().items()},
+                ]
+            )
+        try:
+            remaining = None if target is None else target - self.iteration
+            with _tqdm(total=remaining, desc="iterations", unit="iter") as bar:
+                while target is None or self.iteration < target:
+                    t0 = time.perf_counter()
+                    stats.append(self.train_iteration())
+                    s = stats[-1]
+                    s["elapsed"] = time.perf_counter() - t0
+                    bar.update(1)
+                    tqdm.write(
+                        f"iter {s['iteration']:3d}  loss {s['loss_mean']:.4f}"
+                        f" (pol {s['policy_loss']:.3f} val {s['value_loss']:.3f})  "
+                        f"buffer {s['buffer_size']}  "
+                        f"arena {s['arena_wins']}W/{s['arena_losses']}L/{s['arena_draws']}D"
+                        f" ({s['arena_ratio']:.2f}) "
+                        f"{s['arena_plies'] // max(1, s['arena_wins'] + s['arena_losses'] + s['arena_draws'])}ply/g  "
+                        f"{'BEST ' if s['improved'] else ''}"
+                        f"[{s['elapsed']:.1f}s]"
+                    )
+        finally:
+            if self.server is not None:
+                self.server.shutdown()
+                self.server = None
         return stats
 
 
@@ -641,6 +694,9 @@ def main(argv=None) -> None:
                         help="delete all checkpoints (after confirmation) and train fresh")
     parser.add_argument("--yes", action="store_true",
                         help="with --restart: skip the confirmation prompt")
+    parser.add_argument("--device", default=None,
+                        choices=VALID_DEVICES,
+                        help="device override: auto (default, from config), cpu, mps, cuda")
     args = parser.parse_args(argv)
     if args.iterations is not None and args.iterations < 0:
         parser.error("--iterations must be >= 0")
@@ -655,11 +711,13 @@ def main(argv=None) -> None:
             training=replace(cfg.training, workers=min(cfg.training.workers, cpus)),
         )
 
+    device = resolve_device(args.device if args.device else cfg.device.name)
+
     if args.restart:
         _confirm_and_wipe(Path(cfg.training.checkpoint_dir), args.yes)
 
     try:
-        trainer = Trainer(cfg)
+        trainer = Trainer(cfg, device=device)
     except KeyboardInterrupt:
         # The first optimizer/network init lazily imports torch internals,
         # which can take seconds; nothing exists to save yet.
@@ -685,6 +743,8 @@ def main(argv=None) -> None:
     print(f"  network     {cfg.network.blocks} blocks x {cfg.network.base_channels} ch"
           f" ({n_params:,} params)")
     print(f"  cpus        {cpus} (worker counts capped at this)")
+    print(f"  inference   central server on {device}" if device in ("mps", "cuda")
+          else f"  inference   per-worker CPU nets")
     print(f"  self-play   {cfg.training.selfplay_games} games"
           f" x {cfg.training.workers} worker(s),"
           f" {cfg.mcts.simulations} sims/move")
@@ -707,9 +767,12 @@ def main(argv=None) -> None:
         tqdm.write("Pretraining value head on random-rollout outcomes...")
         t0 = time.perf_counter()
         with _tqdm(desc="pretrain value", unit="batch", leave=False) as bar:
-            trainer.net.train()
+            # Pretrain runs on a CPU copy (one-time, cheap); weights copy back.
+            cpu_net = ResNet(cfg.network)
+            cpu_net.load_state_dict({k: v.cpu() for k, v in trainer.net.state_dict().items()})
+            cpu_net.train()
             mse = pretrain_value(
-                trainer.net,
+                cpu_net,
                 cfg.training.pretrain_games,
                 cfg.training.pretrain_epochs,
                 cfg.training.batch_size,
@@ -718,6 +781,7 @@ def main(argv=None) -> None:
                 cfg.training.seed + 12345,
                 progress=bar.update,
             )
+            trainer.net.load_state_dict({k: v.to(trainer.device) for k, v in cpu_net.state_dict().items()})
             trainer.net.eval()
         trainer.best_net.load_state_dict(trainer.net.state_dict())
         print(f"  pretrain    done in {time.perf_counter() - t0:.0f}s,"

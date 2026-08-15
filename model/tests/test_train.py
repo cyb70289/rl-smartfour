@@ -428,8 +428,11 @@ def test_config_loads_from_toml():
 
     cfg = load_config("config.toml")
     assert cfg.network.input_channels == 16
-    assert cfg.network.blocks == 5
-    assert cfg.mcts.simulations == 400
+    assert cfg.network.blocks == 16
+    assert cfg.mcts.simulations == 500
+    assert cfg.mcts.batch_eval_size == 128
     assert cfg.training.selfplay_games == 100
     assert cfg.training.workers == 8
-    assert cfg.training.pretrain_games == 2000
+    assert cfg.training.pretrain_games == 20000
+    assert cfg.training.pretrain_epochs == 64
+    assert cfg.device.name == "auto"

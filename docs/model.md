@@ -2,10 +2,37 @@ Smart-four AlphaZero model
 ==========================
 
 AlphaZero-style training and inference (ResNet + MCTS) for the smart-four
-game (rules in [`game.md`](game.md)), implemented in `model/` with PyTorch,
-CPU only. All network inputs and outputs are from the perspective of the
-*current player* (the player to move), which leverages the color symmetry and
+game (rules in [`game.md`](game.md)), implemented in `model/` with PyTorch.
+All network inputs and outputs are from the perspective of the *current
+player* (the player to move), which leverages the color symmetry and
 keeps the design simple; MCTS keeps the same convention.
+
+Devices and the inference server
+--------------------------------
+
+`--device {auto,cpu,mps,cuda}` (or `[device] name` in the TOML, which the
+flag overrides) selects where nets run. `auto` picks cuda → mps → cpu;
+requesting an unavailable device is a hard error, never a silent fallback.
+
+- **cpu**: every worker process keeps its own local net copy (8 parallel
+  CPU inference streams beat one shared stream — threads do not scale this
+  workload on Apple silicon).
+- **mps/cuda**: a single central *inference server* process owns the
+  accelerator nets. Workers run MCTS tree logic on CPU and ship encoded
+  leaf batches to the server over pipes; the server greedily drains all
+  queued requests into one large net forward per slot (so GPU batch size
+  scales with the number of busy workers, well past one search's
+  `batch_eval_size`), masks+softmaxes priors over legal actions on device,
+  and returns (priors, values). The server hosts two net slots: slot 0 =
+  candidate/current net, slot 1 = best net (arena). It lives for the whole
+  training run and receives fresh weights at phase boundaries, when no
+  workers are connected.
+
+The optimization phase runs on the selected device (batches are copied per
+step; the replay buffer stays on CPU). Checkpoints (`latest.pt`, `best.pt`)
+normalize every tensor to CPU on save, so a checkpoint written on mps/cuda
+resumes or serves on any device. Inference (`smartfour.infer`, the UI
+worker) stays CPU-only by design.
 
 Rules recap (see [`game.md`](game.md) and `smartfour/game.py`, a faithful
 port of the UI engine): 5x5 grid, stacks up to 5 high; win by lining 4+ own
@@ -45,13 +72,15 @@ Network
 - policy head: 1x1 convs → 5 height planes (125 logits)
 - value head: 1x1 conv → flatten → MLP → scalar in (-1, 1)
 
-Defaults (`config.toml`): 5 blocks, 64 base channels. `config_small.toml` is
-a reduced profile (3 blocks, 32 channels) for quick CPU proof runs.
+Defaults (`config.toml`): 16 blocks, 128 base channels, 500 sims, batch_eval
+128. `config_small.toml` is a reduced profile (3 blocks, 32 channels) for
+quick CPU proof runs.
 
 MCTS
 ----
-`smartfour/mcts.py` — standard AlphaZero MCTS, CPU-only, configurable in the
-same TOML file:
+`smartfour/mcts.py` — standard AlphaZero MCTS, configurable in the same TOML
+file. Evaluation goes through an injectable `evaluator` (local net or the
+central server's RemoteEvaluator):
 
 - PUCT selection: `Q + c_puct * P * sqrt(N_parent) / (1 + N_child)`; Q is
   negated at each level because every node stores values from its own
@@ -141,13 +170,16 @@ Checkpoints live in `checkpoint_dir` (`checkpoints/`):
 Parallel self-play and arena
 ----------------------------
 With `workers > 1` in `[training]`, each iteration spawns that many
-processes; every worker rebuilds the net from the current weights, plays its
-share of the self-play games, and ships the samples back over a queue. The
-trainer collects exactly `selfplay_games` games. The arena parallelizes the
-same way with the same `workers` count: each worker rebuilds both nets
-(candidate and best), plays its share of the alternating-color games, and
-ships per-game results back over a queue; the trainer collects exactly
-`eval_games` games. Inference remains single-process.
+processes. On cpu each worker rebuilds the net from the current weights and
+evaluates locally; on mps/cuda the workers instead connect to the central
+inference server (see above) and evaluate remotely — tree logic local,
+forward passes centralized. Either way the worker plays its share of the
+self-play games and ships the samples back over a queue, and the trainer
+collects exactly `selfplay_games` games. The arena parallelizes the same way
+with the same `workers` count: slot 0 = candidate, slot 1 = best, colors
+alternate by global game index, per-game results ship over a queue, and the
+trainer collects exactly `eval_games` games. Inference remains
+single-process and CPU-only.
 
 Inference
 ---------
@@ -170,17 +202,22 @@ Running
 -------
 ```sh
 cd model
-python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt   # torch (CPU) + tqdm
 .venv/bin/pip install pytest                # dev only: run the test suite
 
-.venv/bin/python -m pytest tests/        # full TDD suite (420+ tests)
+.venv/bin/python -m pytest tests/        # full TDD suite (440+ tests)
 
 .venv/bin/python -m smartfour.train --config config.toml --iterations 10
                                             # resume is automatic; 10 is a target
 .venv/bin/python -m smartfour.train --config config.toml          # train forever until Ctrl-C
+.venv/bin/python -m smartfour.train --config config.toml --device mps --iterations 10
+                                            # explicit device (overrides [device]);
+                                            # auto uses cuda > mps > cpu
 .venv/bin/python -m smartfour.train --config config.toml --restart --yes
                                             # wipe checkpoints/ (confirmation prompt
                                             # without --yes) and start from iteration 1
 .venv/bin/python -m smartfour.infer --checkpoint checkpoints/best.pt --sims 200 --state state.json
+
+# per-phase benchmarks (net throughput, self-play, optimize, arena)
+.venv/bin/python tools/bench.py --config config.toml --device mps
 ```

@@ -32,13 +32,11 @@ def state_key(state) -> tuple:
 
 
 def state_hash(state) -> str:
-    """Stable cross-process md5 hex digest of a GameState (grid + player)."""
+    """Stable cross-process digest of a GameState (bitboards + player)."""
     h = hashlib.md5()
+    h.update(state.white.to_bytes(16, "little"))
+    h.update(state.black.to_bytes(16, "little"))
     h.update(bytes((state.current,)))
-    for plane in state.grid:
-        for col in plane:
-            for p in col:
-                h.update(b"\x00" if p is None else (b"\x01" if p == WHITE else b"\x02"))
     return h.hexdigest()
 
 
