@@ -44,9 +44,9 @@ npm run build
 npm run preview -- --host 0.0.0.0 --port 8032
 ```
 
-Play against the machine or a person on the same screen; you can revert the
-last move, pick your color, and adjust machine think effort (disable = policy
-only).
+Play against the machine or a person on the same screen; you can revert moves
+(including finished games), pick your color, and adjust machine think effort
+(0 = policy only) — setup changes apply immediately.
 
 ## CREDIT
 

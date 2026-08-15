@@ -1,6 +1,6 @@
 import { reduce, newGame } from './engine';
 import type { GameConfig } from './engine';
-import type { GameState, Move } from './types';
+import type { GameState, Move, ThinkSettings } from './types';
 import type { MachinePlayer } from './machine';
 
 /**
@@ -40,6 +40,24 @@ export class GameController {
 
   revert(): void {
     this.setState(reduce(this.state, { type: 'revert' }));
+    // Reverting a finished game can hand the turn to the machine.
+    this.kickMachine();
+  }
+
+  /**
+   * Applies new think settings without restarting the game. If the machine is
+   * mid-think, the in-flight search is aborted and restarted with the new
+   * settings so the change takes effect immediately.
+   */
+  updateSettings(settings: ThinkSettings): void {
+    if (this.state.settings.effort === settings.effort) return;
+    if (this.state.machineThinking) {
+      this.generation++;
+      this.abortCtrl?.abort();
+      this.abortCtrl = null;
+    }
+    this.setState({ ...this.state, settings });
+    this.kickMachine();
   }
 
   reset(config: GameConfig): void {

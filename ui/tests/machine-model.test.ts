@@ -4,7 +4,7 @@ import { newGame, reduce } from '../src/game/engine';
 import type { GameConfig } from '../src/game/engine';
 import type { GameState, ThinkSettings } from '../src/game/types';
 
-const person: GameConfig = { mode: 'person', humanColor: 'white', settings: { disabled: false, effort: 100 } };
+const person: GameConfig = { mode: 'person', humanColor: 'white', settings: { effort: 100 } };
 
 function gameState(): GameState {
   return newGame(person);
@@ -64,13 +64,11 @@ describe('stateToJson (UI state → model JSON contract)', () => {
 
 describe('simulationsOf (settings → MCTS steps)', () => {
   const cases: Array<[ThinkSettings, number]> = [
-    [{ disabled: false, effort: 100 }, 100],
-    [{ disabled: true, effort: 100 }, 0], // policy only
-    [{ disabled: true, effort: 0 }, 0],
-    [{ disabled: false, effort: 0 }, 0], // slider min is 0; MCTS(0) is not policy-only
-    [{ disabled: false, effort: 50.7 }, 50],
-    [{ disabled: false, effort: -3 }, 0],
-    [{ disabled: false, effort: NaN }, 0],
+    [{ effort: 100 }, 100],
+    [{ effort: 0 }, 0], // slider min is 0 = policy only
+    [{ effort: 50.7 }, 50],
+    [{ effort: -3 }, 0],
+    [{ effort: NaN }, 0],
   ];
   it('maps every settings combination', () => {
     for (const [settings, expected] of cases) {
@@ -84,7 +82,7 @@ describe('ModelMachinePlayer', () => {
     const mock = fetchMock();
     const player = new ModelMachinePlayer();
     const state = gameState();
-    const move = await player.think(state, { disabled: false, effort: 50 });
+    const move = await player.think(state, { effort: 50 });
     expect(move).toEqual({ x: 1, z: 1 });
     const [url, init] = mock.mock.calls[0]!;
     expect(url).toBe('/api/think');
@@ -94,10 +92,10 @@ describe('ModelMachinePlayer', () => {
     expect(body).toEqual({ state: stateToJson(state), simulations: 50 });
   });
 
-  it('sends simulations=0 when search is disabled', async () => {
+  it('sends simulations=0 when effort is 0 (policy only)', async () => {
     const mock = fetchMock();
     const player = new ModelMachinePlayer();
-    await player.think(gameState(), { disabled: true, effort: 200 });
+    await player.think(gameState(), { effort: 0 });
     const body = JSON.parse(String(mock.mock.calls[0]![1]?.body));
     expect(body.simulations).toBe(0);
   });
@@ -107,7 +105,7 @@ describe('ModelMachinePlayer', () => {
     const player = new ModelMachinePlayer();
     const ac = new AbortController();
     ac.abort();
-    await expect(player.think(gameState(), { disabled: false, effort: 10 }, ac.signal)).rejects.toThrow(/aborted/i);
+    await expect(player.think(gameState(), { effort: 10 }, ac.signal)).rejects.toThrow(/aborted/i);
     expect(mock).not.toHaveBeenCalled();
   });
 
@@ -120,7 +118,7 @@ describe('ModelMachinePlayer', () => {
     vi.stubGlobal('fetch', mock);
     const player = new ModelMachinePlayer();
     const ac = new AbortController();
-    const pending = player.think(gameState(), { disabled: false, effort: 10 }, ac.signal);
+    const pending = player.think(gameState(), { effort: 10 }, ac.signal);
     ac.abort();
     await expect(pending).rejects.toThrow(/aborted/i);
   });
@@ -128,7 +126,7 @@ describe('ModelMachinePlayer', () => {
   it('surfaces the bridge error message from an error response', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ error: 'model unavailable: no checkpoint' }, 503)));
     const player = new ModelMachinePlayer();
-    await expect(player.think(gameState(), { disabled: false, effort: 10 })).rejects.toThrow(
+    await expect(player.think(gameState(), { effort: 10 })).rejects.toThrow(
       'model unavailable: no checkpoint',
     );
   });
@@ -136,31 +134,31 @@ describe('ModelMachinePlayer', () => {
   it('rejects on a non-JSON error response', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('Internal Server Error', { status: 500 })));
     const player = new ModelMachinePlayer();
-    await expect(player.think(gameState(), { disabled: false, effort: 10 })).rejects.toThrow(/non-JSON/);
+    await expect(player.think(gameState(), { effort: 10 })).rejects.toThrow(/non-JSON/);
   });
 
   it('surfaces an in-band worker error from a 200 response', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ error: 'ValueError: missing state' })));
     const player = new ModelMachinePlayer();
-    await expect(player.think(gameState(), { disabled: false, effort: 10 })).rejects.toThrow('ValueError: missing state');
+    await expect(player.think(gameState(), { effort: 10 })).rejects.toThrow('ValueError: missing state');
   });
 
   it('rejects a null move (game over) defensively', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ move: null })));
     const player = new ModelMachinePlayer();
-    await expect(player.think(gameState(), { disabled: false, effort: 10 })).rejects.toThrow(/no move/);
+    await expect(player.think(gameState(), { effort: 10 })).rejects.toThrow(/no move/);
   });
 
   it('rejects a malformed move shape', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ move: { x: '2', z: 3 } })));
     const player = new ModelMachinePlayer();
-    await expect(player.think(gameState(), { disabled: false, effort: 10 })).rejects.toThrow(/malformed/);
+    await expect(player.think(gameState(), { effort: 10 })).rejects.toThrow(/malformed/);
   });
 
   it('rejects an out-of-bounds move as illegal', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ move: { x: 9, z: 9 } })));
     const player = new ModelMachinePlayer();
-    await expect(player.think(gameState(), { disabled: false, effort: 10 })).rejects.toThrow(/illegal/);
+    await expect(player.think(gameState(), { effort: 10 })).rejects.toThrow(/illegal/);
   });
 
   it('rejects a move onto a full column as illegal', async () => {
@@ -168,12 +166,12 @@ describe('ModelMachinePlayer', () => {
     for (let i = 0; i < 5; i++) s = reduce(s, { type: 'move', move: { x: 0, z: 0 } });
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ move: { x: 0, z: 0 } })));
     const player = new ModelMachinePlayer();
-    await expect(player.think(s, { disabled: false, effort: 10 })).rejects.toThrow(/illegal/);
+    await expect(player.think(s, { effort: 10 })).rejects.toThrow(/illegal/);
   });
 
   it('accepts a response with extra fields', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ move: { x: 2, z: 4 }, id: 7 })));
     const player = new ModelMachinePlayer();
-    await expect(player.think(gameState(), { disabled: false, effort: 10 })).resolves.toEqual({ x: 2, z: 4 });
+    await expect(player.think(gameState(), { effort: 10 })).resolves.toEqual({ x: 2, z: 4 });
   });
 });

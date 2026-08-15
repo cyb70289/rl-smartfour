@@ -12,7 +12,7 @@ if (!container) throw new Error('missing #scene-container');
 const initialConfig: GameConfig = {
   mode: 'machine',
   humanColor: 'white',
-  settings: { disabled: false, effort: 100 },
+  settings: { effort: 2000 },
 };
 
 function canHumanMove(s: GameState): boolean {
@@ -34,6 +34,7 @@ const scene = new GameScene(container, {
 const hud = new Hud(document.getElementById('app')!, {
   onRevert: () => controller.revert(),
   onNewGame: (config) => controller.reset(config),
+  onSettingsChange: (settings) => controller.updateSettings(settings),
 });
 
 function sync(): void {

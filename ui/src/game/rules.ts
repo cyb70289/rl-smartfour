@@ -28,7 +28,7 @@ export function createInitialState(
   piecesPerPlayer: number = DEFAULT_PIECES,
   mode: Mode = 'person',
   humanColor: Player = 'white',
-  settings: ThinkSettings = { disabled: false, effort: 100 },
+  settings: ThinkSettings = { effort: 2000 },
 ): GameState {
   const grid: (Player | null)[][][] = [];
   for (let x = 0; x < BOARD_SIZE; x++) {

@@ -4,9 +4,9 @@ import type { GameConfig } from '../src/game/engine';
 import { cellAt, stackHeight } from '../src/game/rules';
 import type { GameState } from '../src/game/types';
 
-const person: GameConfig = { mode: 'person', humanColor: 'white', settings: { disabled: false, effort: 100 } };
-const machineHumanWhite: GameConfig = { mode: 'machine', humanColor: 'white', settings: { disabled: false, effort: 100 } };
-const machineHumanBlack: GameConfig = { mode: 'machine', humanColor: 'black', settings: { disabled: false, effort: 100 } };
+const person: GameConfig = { mode: 'person', humanColor: 'white', settings: { effort: 100 } };
+const machineHumanWhite: GameConfig = { mode: 'machine', humanColor: 'white', settings: { effort: 100 } };
+const machineHumanBlack: GameConfig = { mode: 'machine', humanColor: 'black', settings: { effort: 100 } };
 
 /** Helper: apply a plain move (person mode, or human move in machine mode). */
 function mv(s: GameState, x: number, z: number): GameState {
@@ -163,7 +163,7 @@ describe('engine: revert (person mode)', () => {
     expect(s.revertAvailable).toBe(false);
   });
 
-  it('rejects revert with no moves, while thinking, and after game over', () => {
+  it('rejects revert with no moves and while thinking', () => {
     expect(() => reduce(newGame(person), { type: 'revert' })).toThrow(IllegalActionError);
 
     let s = newGame(machineHumanWhite);
@@ -172,7 +172,7 @@ describe('engine: revert (person mode)', () => {
     expect(() => reduce(s, { type: 'revert' })).toThrow(IllegalActionError);
   });
 
-  it('rejects revert after a win', () => {
+  it('reverts a finished game in person mode', () => {
     let s = newGame(person);
     const seq: Array<[number, number]> = [
       [0, 0],
@@ -185,7 +185,13 @@ describe('engine: revert (person mode)', () => {
     ];
     for (const [x, z] of seq) s = mv(s, x, z);
     expect(s.winner).toBe('white');
-    expect(() => reduce(s, { type: 'revert' })).toThrow(IllegalActionError);
+    s = reduce(s, { type: 'revert' });
+    expect(s.winner).toBeNull();
+    expect(s.winningCells).toBeNull();
+    expect(s.history).toHaveLength(6);
+    expect(s.current).toBe('white'); // turn returns to the mover of the undone move
+    expect(cellAt(s.grid, 3, 0, 0)).toBeNull();
+    expect(s.revertAvailable).toBe(false);
   });
 
   it('rejects moves after a revert consumed the window', () => {
@@ -224,6 +230,63 @@ describe('engine: revert (machine mode)', () => {
     expect(s.history).toHaveLength(2);
     expect(s.history[0]).toEqual({ x: 3, z: 3, player: 'white' });
     expect(s.history[1]).toEqual({ x: 1, z: 1, player: 'black' });
+  });
+
+  it('reverting a human win hands the turn back to the machine', () => {
+    let s = newGame(machineHumanWhite);
+    // White (human) wins on the 7th ply: (0,0),(1,0),(2,0),(3,0) at level 0.
+    const seq: Array<[number, number]> = [
+      [0, 0],
+      [4, 4],
+      [1, 0],
+      [4, 3],
+      [2, 0],
+      [4, 2],
+      [3, 0],
+    ];
+    for (let i = 0; i < seq.length; i++) {
+      s = reduce(
+        s,
+        i % 2 === 0
+          ? { type: 'move', move: { x: seq[i]![0], z: seq[i]![1] } }
+          : { type: 'machine-move', move: { x: seq[i]![0], z: seq[i]![1] } },
+      );
+    }
+    expect(s.winner).toBe('white');
+    s = reduce(s, { type: 'revert' });
+    expect(s.winner).toBeNull();
+    expect(s.history).toHaveLength(5);
+    expect(s.current).toBe('black');
+    expect(s.machineThinking).toBe(true); // machine owes a move again
+    expect(cellAt(s.grid, 3, 0, 0)).toBeNull();
+  });
+
+  it('reverting a machine win returns the turn to the human', () => {
+    let s = newGame(machineHumanBlack);
+    // White (machine) wins on the 7th ply; human black fills the rest.
+    const seq: Array<[number, number]> = [
+      [0, 0],
+      [4, 4],
+      [1, 0],
+      [4, 3],
+      [2, 0],
+      [4, 2],
+      [3, 0],
+    ];
+    for (let i = 0; i < seq.length; i++) {
+      s = reduce(
+        s,
+        i % 2 === 0
+          ? { type: 'machine-move', move: { x: seq[i]![0], z: seq[i]![1] } }
+          : { type: 'move', move: { x: seq[i]![0], z: seq[i]![1] } },
+      );
+    }
+    expect(s.winner).toBe('white');
+    s = reduce(s, { type: 'revert' });
+    expect(s.winner).toBeNull();
+    expect(s.history).toHaveLength(5);
+    expect(s.current).toBe('black');
+    expect(s.machineThinking).toBe(false);
   });
 });
 

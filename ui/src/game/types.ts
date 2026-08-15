@@ -16,9 +16,8 @@ export type Winner = Player | 'draw' | null;
 
 export type Mode = 'person' | 'machine';
 
-/** Machine search settings. `disabled` = policy only (no MCTS search). */
+/** Machine search settings. `effort` = MCTS steps; 0 = policy only (no search). */
 export interface ThinkSettings {
-  disabled: boolean;
   effort: number;
 }
 

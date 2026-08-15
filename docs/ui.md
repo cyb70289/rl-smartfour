@@ -9,16 +9,20 @@ AlphaZero model (see `docs/model.md`), reached through a Vite bridge plugin.
 What it provides
 ----------------
 - 3D board, draggable to view from any angle (pieces can block each other).
-- Bucket-shaped pieces stacked bottom-up, white first; piece counts and
-  current player shown.
+  The default view frames the board in the upper part of the window; the last
+  camera position/zoom/angle is remembered and restored on the next load.
+- Bucket-shaped pieces stacked bottom-up, white first; the top bar shows the
+  current player and the human's remaining pieces.
 - Last move highlighted; winning line highlighted with winner shown; draw
   shown when all 64 pieces are placed without a winner.
 - Revert one level: in person mode it undoes the last move; in machine mode
   it undoes the machine and the last human move together so the human can
-  retry. The revert window is consumed by the revert (no double undo).
-- Person or machine mode; machine color selectable; machine search can be
-  disabled (policy only) or given an effort (MCTS steps) in the UI; board
-  input is locked while the machine thinks.
+  retry. The revert window is consumed by the revert (no double undo); a
+  finished game can be reverted as well.
+- Person or machine mode (radio, applied immediately); machine color
+  selectable (radio, applied immediately); machine think effort (MCTS steps)
+  selectable in the UI — 0 = policy only — applied immediately; board input
+  is locked while the machine thinks.
 
 Architecture
 ------------
@@ -38,8 +42,8 @@ Architecture
 - `src/ui/` — rendering layer:
   - `scene.ts` — Three.js scene: board, pieces, last-move ring, win beam,
     hover ghost, stack-height-aware column picking, orbit camera.
-  - `hud.ts` — DOM side panel: status, piece counts, last move, revert/new
-    game buttons, mode/color/think-effort setup.
+  - `src/ui/hud.ts` — top-bar status (with remaining pieces) and DOM side panel:
+    revert/new game buttons, mode/color/think-effort setup.
 
 Design notes
 ------------
@@ -72,7 +76,7 @@ Where things live
   and is wired up in `src/main.ts`. It converts the state to the model's
   JSON contract (`stateToJson`: grid colors 0/1/null, `pieces_left`,
   `current`, `winner`), maps settings to MCTS steps (`simulationsOf`:
-  disabled or effort < 1 → 0 = policy-only, else `floor(effort)`), passes
+  effort < 1 → 0 = policy-only, else `floor(effort)`), passes
   the abort signal to `fetch` (aborts reject promptly) and validates the
   returned move against the snapshot before resolving. `RandomMachinePlayer`
   remains as a reference/test fixture.

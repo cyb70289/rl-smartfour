@@ -5,9 +5,9 @@ import { legalMoves } from '../src/game/rules';
 import type { GameConfig } from '../src/game/engine';
 import type { GameState, Move, ThinkSettings } from '../src/game/types';
 
-const person: GameConfig = { mode: 'person', humanColor: 'white', settings: { disabled: false, effort: 100 } };
-const machineHumanWhite: GameConfig = { mode: 'machine', humanColor: 'white', settings: { disabled: false, effort: 100 } };
-const machineHumanBlack: GameConfig = { mode: 'machine', humanColor: 'black', settings: { disabled: false, effort: 100 } };
+const person: GameConfig = { mode: 'person', humanColor: 'white', settings: { effort: 100 } };
+const machineHumanWhite: GameConfig = { mode: 'machine', humanColor: 'white', settings: { effort: 100 } };
+const machineHumanBlack: GameConfig = { mode: 'machine', humanColor: 'black', settings: { effort: 100 } };
 
 /** Fake machine with manually controlled promise resolution. */
 class FakeMachine {
@@ -37,7 +37,7 @@ describe('RandomMachinePlayer', () => {
     const machine = new RandomMachinePlayer();
     const ctrl = new GameController(machine, machineHumanWhite, () => {});
     ctrl.humanMove({ x: 2, z: 2 });
-    const move = await machine.think(ctrl.state, { disabled: false, effort: 50 });
+    const move = await machine.think(ctrl.state, { effort: 50 });
     expect(legalMoves(ctrl.state).some((m) => m.x === move.x && m.z === move.z)).toBe(true);
   });
 });
@@ -188,5 +188,90 @@ describe('GameController: machine turn orchestration', () => {
     expect(seen).toEqual(['1']);
     machine.resolveNext({ x: 0, z: 0 });
     return flush().then(() => expect(seen).toEqual(['1', '2']));
+  });
+
+  it('reverting a finished machine game re-kicks the machine when it owes a move', async () => {
+    const machine = new FakeMachine();
+    const ctrl = new GameController(machine, machineHumanWhite, () => {});
+    // White (human) wins on the 7th ply; machine black replies harmlessly.
+    const humans: Array<[number, number]> = [
+      [0, 0],
+      [1, 0],
+      [2, 0],
+      [3, 0],
+    ];
+    const machines: Array<[number, number]> = [
+      [4, 4],
+      [4, 3],
+      [4, 2],
+    ];
+    for (let i = 0; i < 3; i++) {
+      ctrl.humanMove({ x: humans[i]![0], z: humans[i]![1] });
+      machine.resolveNext({ x: machines[i]![0], z: machines[i]![1] });
+      await flush();
+    }
+    ctrl.humanMove({ x: humans[3]![0], z: humans[3]![1] });
+    expect(ctrl.state.winner).toBe('white');
+    expect(ctrl.state.machineThinking).toBe(false);
+    expect(machine.calls).toHaveLength(3);
+
+    ctrl.revert();
+    expect(ctrl.state.winner).toBeNull();
+    expect(ctrl.state.history).toHaveLength(5);
+    expect(ctrl.state.machineThinking).toBe(true); // machine owes a move
+    expect(machine.calls).toHaveLength(4); // think re-kicked
+
+    machine.resolveNext({ x: 2, z: 2 });
+    await flush();
+    expect(ctrl.state.history).toHaveLength(6);
+    expect(ctrl.state.current).toBe('white');
+    expect(ctrl.state.machineThinking).toBe(false);
+  });
+});
+
+describe('GameController: think settings', () => {
+  it('applies new settings immediately without restarting the game', () => {
+    const machine = new FakeMachine();
+    const ctrl = new GameController(machine, machineHumanWhite, () => {});
+    ctrl.updateSettings({ effort: 1500 });
+    expect(ctrl.state.settings).toEqual({ effort: 1500 });
+    expect(ctrl.state.history).toEqual([]);
+  });
+
+  it('restarts the in-flight think with the new settings', async () => {
+    const machine = new FakeMachine();
+    const ctrl = new GameController(machine, machineHumanWhite, () => {});
+    ctrl.humanMove({ x: 2, z: 2 });
+    expect(machine.calls).toHaveLength(1);
+    expect(machine.calls[0]!.settings).toEqual({ effort: 100 });
+    const oldSignal = machine.calls[0]!.signal;
+
+    ctrl.updateSettings({ effort: 2000 });
+    expect(ctrl.state.machineThinking).toBe(true);
+    expect(machine.calls).toHaveLength(2);
+    expect(machine.calls[1]!.settings).toEqual({ effort: 2000 });
+    expect(oldSignal?.aborted).toBe(true);
+
+    // The stale (aborted) think resolving must not corrupt the state.
+    machine.resolveNext({ x: 1, z: 1 });
+    await flush();
+    expect(ctrl.state.history).toEqual([{ x: 2, z: 2, player: 'white' }]);
+    expect(ctrl.state.machineThinking).toBe(true);
+
+    machine.resolveNext({ x: 0, z: 0 });
+    await flush();
+    expect(ctrl.state.history).toEqual([
+      { x: 2, z: 2, player: 'white' },
+      { x: 0, z: 0, player: 'black' },
+    ]);
+  });
+
+  it('ignores a settings update that does not change the effort', () => {
+    const machine = new FakeMachine();
+    const ctrl = new GameController(machine, machineHumanWhite, () => {});
+    ctrl.humanMove({ x: 2, z: 2 });
+    const calls = machine.calls.length;
+    ctrl.updateSettings({ effort: 100 });
+    expect(machine.calls).toHaveLength(calls);
   });
 });

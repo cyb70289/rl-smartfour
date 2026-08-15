@@ -52,7 +52,7 @@ html, body {
   grid-area: scene;
   position: relative;
   overflow: hidden;
-  background: radial-gradient(circle at 50% 40%, #1b1f29, #0e1014);
+  background: radial-gradient(circle at 50% 40%, #333a49, #232833);
   cursor: grab;
 }
 #scene-container.dragging { cursor: grabbing; }
@@ -119,16 +119,15 @@ button.primary:hover:not(:disabled) { background: #275f7a; }
   margin-bottom: 10px;
   color: var(--muted);
 }
-.field select, .field input[type="range"] { width: 100%; }
-.field select {
-  background: #262a35;
+.field input[type="range"] { width: 100%; }
+.radio-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px 8px;
   font-size: 14px;
 }
-.checkbox-field { flex-direction: row; align-items: center; gap: 8px; color: var(--text); }
+.radio-row input { accent-color: var(--accent); }
 
 #hintbar {
   grid-area: hintbar;

@@ -67,9 +67,11 @@ function machineMove(state: GameState, move: Move): GameState {
 }
 
 function revert(state: GameState): GameState {
-  if (state.winner !== null) throw new IllegalActionError('game is over');
   if (state.machineThinking) throw new IllegalActionError('machine is thinking');
-  if (!state.revertAvailable || state.history.length === 0) {
+  if (state.history.length === 0) throw new IllegalActionError('nothing to revert');
+  // A finished game (win/draw) is revertable too; mid-game the one-move
+  // revert window applies.
+  if (!state.revertAvailable && state.winner === null) {
     throw new IllegalActionError('nothing to revert');
   }
   // Person mode: undo one move. Machine mode: undo machine + human move together.
@@ -78,7 +80,9 @@ function revert(state: GameState): GameState {
 
   let s = createInitialState(state.piecesPerPlayer, state.mode, state.humanColor, state.settings);
   for (const h of kept) s = applyMove(s, { x: h.x, z: h.z });
-  s.machineThinking = false;
+  // Reverting a finished game can hand the turn back to the machine
+  // (e.g. the human's winning move is undone); the controller then thinks.
+  s.machineThinking = s.mode === 'machine' && s.current === machineColorOf(s);
   s.revertAvailable = false;
   return s;
 }

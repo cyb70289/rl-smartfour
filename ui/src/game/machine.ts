@@ -4,9 +4,9 @@ import type { GameState, Move, Player, ThinkSettings, Winner } from './types';
 /**
  * The interface a real model must implement. The board is handed over as an
  * immutable game-state snapshot; the model derives its own input encoding.
- * `settings.disabled` = policy only (no MCTS search), `settings.effort` = MCTS
- * search steps. `signal` is aborted when the move is no longer wanted (e.g. a
- * new game was started); implementations SHOULD abort and reject promptly.
+ * `settings.effort` = MCTS search steps (0 = policy only). `signal` is
+ * aborted when the move is no longer wanted (e.g. a new game was started);
+ * implementations SHOULD abort and reject promptly.
  */
 export interface MachinePlayer {
   readonly name: string;
@@ -56,11 +56,11 @@ export function stateToJson(state: Readonly<GameState>): ModelRequestState {
 
 /**
  * MCTS search steps for the given settings. Policy-only (simulations=0) when
- * search is disabled OR effort < 1: the UI slider's minimum is 0, and running
- * MCTS with 0 simulations is not the same as a policy-only argmax.
+ * effort < 1: the UI slider's minimum is 0, and running MCTS with 0
+ * simulations is not the same as a policy-only argmax.
  */
 export function simulationsOf(settings: ThinkSettings): number {
-  if (settings.disabled || !Number.isFinite(settings.effort) || settings.effort < 1) return 0;
+  if (!Number.isFinite(settings.effort) || settings.effort < 1) return 0;
   return Math.floor(settings.effort);
 }
 
