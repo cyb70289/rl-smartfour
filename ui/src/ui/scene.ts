@@ -8,6 +8,10 @@ const CELL = 1.15 * Math.SQRT2; // board 2x in area
 const BASE_Y = 0.18;
 const PIECE_H = 0.45; // 1.5x taller
 const PIECE_R = 0.36 / Math.SQRT2; // 1/2 footprint area
+/** Picker target radius: the piece's visible footprint (1:1 with the ghost). */
+const PICK_R = PIECE_R * 0.92;
+/** Picker thickness: a thin disc sitting on the placement surface. */
+const PICK_H = 0.16;
 
 const BODY_H = PIECE_H / 2;
 
@@ -277,11 +281,13 @@ export class GameScene {
 
   private buildPickers(): void {
     const mat = new THREE.MeshBasicMaterial({ visible: false });
-    const geo = new THREE.BoxGeometry(CELL * 0.92, 1, CELL * 0.92); // unit height; scaled per stack in sync()
+    // A thin disc the size of the piece footprint, sitting on the placement
+    // surface; the clickable area matches the piece/ghost footprint exactly.
+    const geo = new THREE.CylinderGeometry(PICK_R, PICK_R, PICK_H, 16);
     for (let x = 0; x < BOARD_SIZE; x++) {
       for (let z = 0; z < BOARD_SIZE; z++) {
         const box = new THREE.Mesh(geo, mat);
-        box.userData = { x, z };
+        box.userData = { x, z, disabled: false };
         this.pickGroup.add(box);
         this.columnBoxes.push(box);
       }
@@ -289,13 +295,23 @@ export class GameScene {
     this.scene.add(this.pickGroup);
   }
 
-  /** Match each picker box to its visible stack so near stacks only occlude what they actually cover. */
+  /**
+   * Each picker is a piece-sized disc on the placement surface (the base, or
+   * the top of the stack). Only a pointer inside the disc selects the
+   * candidate: pointing at a stack's side face, its lower body, the air above
+   * it, or the base beside it is a no-op. Full columns have no target.
+   */
   private updatePickers(state: GameState): void {
     for (const box of this.columnBoxes) {
       const { x, z } = box.userData as { x: number; z: number };
-      const h = Math.max(stackHeight(state.grid, x, z) * PIECE_H + 0.05, 0.05);
-      box.scale.y = h;
-      box.position.set(wx(x), BASE_Y + h / 2, wz(z));
+      const h = stackHeight(state.grid, x, z);
+      if (h >= STACK_HEIGHT) {
+        box.userData.disabled = true;
+        continue;
+      }
+      box.userData.disabled = false;
+      const surface = BASE_Y + h * PIECE_H; // stack top / base surface
+      box.position.set(wx(x), surface + PICK_H / 2 - 0.04, wz(z));
     }
   }
 
@@ -331,9 +347,20 @@ export class GameScene {
     );
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(ndc, this.camera);
-    const hits = raycaster.intersectObjects(this.columnBoxes, false);
-    if (hits.length === 0) return null;
-    return { x: hits[0]!.object.userData.x, z: hits[0]!.object.userData.z };
+    const hits = raycaster
+      .intersectObjects([...this.columnBoxes, this.pieceGroup], true)
+      .sort((a, b) => a.distance - b.distance);
+    for (const hit of hits) {
+      if (hit.object.userData.piece) {
+        // The ray hit a placed piece first (e.g. a stack's body): pointing
+        // "through" a piece must not select a disc behind it.
+        return null;
+      }
+      if (!hit.object.userData.disabled) {
+        return { x: hit.object.userData.x, z: hit.object.userData.z };
+      }
+    }
+    return null;
   }
 
   private updateGhost(): void {
@@ -387,6 +414,9 @@ function makePiece(player: Player): THREE.Group {
   // Rim fully inside the piece height: with pieces stacked flush it must not
   // poke into the seam above.
   rim.position.y = PIECE_H - 0.045;
+  // Pieces block picking rays: pointing "through" a piece is a no-op.
+  body.userData.piece = true;
+  rim.userData.piece = true;
   g.add(body, rim);
   return g;
 }

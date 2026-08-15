@@ -52,9 +52,14 @@ Design notes
   scene and HUD. The board and moves are the only source of truth.
 - Win detection reports the full winning run for highlighting and is
   exhaustively unit-tested over every 4-in-a-row geometry in 5x5x5.
-- Column picking is sized to the visible stack: empty columns are thin
-  board-level targets, so far columns stay clickable until a real stack
-  blocks the view (then rotate).
+- Column picking targets a piece-sized disc on the placement surface only
+  (the base, or the top of the stack). Only a pointer inside the disc selects
+  the candidate, and the ghost preview appears only then — pointing at a
+  stack's side face, its lower body, the air above it, or the base beside a
+  stack is a no-op; placed pieces also block picking rays, so aiming "through"
+  a stack never lands on a column behind it. Full columns have no target.
+  Small targets keep far columns clickable through gaps between stacks
+  (rotate if a real stack blocks the view).
 - Machine turns are asynchronous: while thinking, board clicks and revert are
   disabled; starting a new game aborts the in-flight move.
 
