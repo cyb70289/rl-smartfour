@@ -37,23 +37,21 @@ class LocalEvaluator:
         with torch.no_grad():
             tensor = torch.stack([encode(s) for s in states]).to(self.device)
             logits, values = self.net(tensor)
-            priors = torch.empty((n, 125), dtype=torch.float32)
-            for i, s in enumerate(states):
-                legal = legal_actions(s)
-                mask = torch.zeros(125, dtype=torch.bool)
-                mask[torch.tensor(legal)] = True
-                masked = torch.where(
-                    mask.to(self.device),
-                    logits[i],
-                    torch.full_like(logits[i], NEG_INF),
-                )
-                priors[i] = torch.softmax(masked, dim=0).cpu()
+            # One batched legality mask on device: channel 10+h set at
+            # (x,z) iff column height is h; the flattened (5,5) plane index
+            # equals the action index y*25 + x*5 + z (same trick as the
+            # inference server).
+            mask = (tensor[:, 10:15] > 0.5).reshape(n, 125)
+            logits = logits.masked_fill(
+                ~mask, torch.tensor(NEG_INF, device=logits.device)
+            )
+            priors = torch.softmax(logits, dim=1).cpu()
             vals = values.squeeze(1).cpu()
         return priors, vals
 
 
 class Node:
-    __slots__ = ("state", "legal", "prior", "children", "visits", "value_sum", "terminal")
+    __slots__ = ("state", "legal", "prior", "children", "visits", "value_sum", "terminal", "pending")
 
     def __init__(self, state, legal, prior=None):
         self.state = state
@@ -63,6 +61,7 @@ class Node:
         self.visits = 0
         self.value_sum = 0.0
         self.terminal = None          # None | float from this node's perspective
+        self.pending = 0              # virtual-loss: visits pending this batch
 
     @property
     def value(self) -> float:
@@ -71,13 +70,14 @@ class Node:
 class _ChildStub:
     """Unmaterialized child: only the parent's prior. Becomes a Node on
     first descent (see MCTS._materialize)."""
-    __slots__ = ("prior", "visits", "value_sum", "terminal")
+    __slots__ = ("prior", "visits", "value_sum", "terminal", "pending")
 
     def __init__(self, prior: float):
         self.prior = prior
         self.visits = 0
         self.value_sum = 0.0
         self.terminal = None
+        self.pending = 0
 
     @property
     def value(self) -> float:
@@ -85,9 +85,11 @@ class _ChildStub:
 
 
 class MCTS:
-    def __init__(self, net, mcts_cfg: MCTSConfig, device="cpu", evaluator=None):
+    def __init__(self, net, mcts_cfg: MCTSConfig, device="cpu", evaluator=None,
+                 batched: bool = False):
         self.cfg = mcts_cfg
         self.evaluator = evaluator if evaluator is not None else LocalEvaluator(net, device)
+        self.batched = batched
         self.last_root_policy_visits = {}
         self.last_stats: dict = {}  # per-search diagnostics, JSON-safe
 
@@ -128,7 +130,10 @@ class MCTS:
             return torch.zeros(125), None, None
         stats["root_value"] = root_value
         stats["root_policy_entropy"] = policy_entropy
-        self._run(root, stats)
+        if self.batched:
+            self._run_batched(root, stats)
+        else:
+            self._run(root, stats)
         pi, chosen = self._visit_policy(root, temperature)
         legal = root.legal
         counts = torch.tensor(
@@ -233,6 +238,96 @@ class MCTS:
                     pending_order.clear()
         if pending_order:
             drain()
+
+    # Virtual-loss value charged to every node on a pending path, from that
+    # node's own perspective (a pending visit looks like a certain loss).
+    _VL = 1.0
+
+    def _run_batched(self, root: Node, stats: dict):
+        """Virtual-loss search: each pass descends up to `target` leaves,
+        charging a temporary loss along each pending path so PUCT steers the
+        next descent to a different line, then evaluates all pending leaves
+        in one net forward and reconciles (penalties removed, values
+        backpropagated). Same PUCT math, priors, and net as `_run`; only the
+        traversal order differs. `target` = max(batch_eval_size, 8) bounded
+        by remaining sims — small searches stay small, big searches fill
+        GPU-sized batches.
+        """
+        target = max(int(getattr(self.cfg, "batch_eval_size", 32)), 8)
+        sims = 0
+        while sims < self.cfg.simulations:
+            k = min(target, self.cfg.simulations - sims)
+            batch = []          # (path, leaf) pairs, pending this pass
+            for _ in range(k):
+                path, leaf = self._descend_vl(root)
+                if leaf is None:
+                    break       # whole tree is pending/terminal-blocked
+                sims += 1
+                stats["sims_done"] = sims
+                stats["depth_total"] += len(path)
+                stats["max_depth"] = max(stats["max_depth"], len(path))
+                stats["leaf_states"].add(state_key(leaf.state))
+                if leaf.terminal is not None:
+                    # Terminal: value known, reconcile immediately.
+                    stats["terminal_hits"] += 1
+                    self._reconcile(path, leaf, leaf.terminal)
+                else:
+                    batch.append((path, leaf))
+            if batch:
+                self._evaluate_batch(batch, stats)
+                stats["net_forwards"] += 1
+                stats["batch_sizes"].append(len(batch))
+        # (no trailing partial batch: every pass drains fully)
+
+    def _descend_vl(self, root: Node):
+        """One PUCT descent with virtual loss on pending paths. Returns
+        (path, leaf); (None, None) when no unblocked leaf exists. Penalties
+        are charged only on a completed descent — an aborted one (every
+        child of some node pending) must leave no trace."""
+        path = []
+        node = root
+        while node.children is not None:
+            best_score = NEG_INF
+            best = []
+            parent_visits = node.visits
+            for a, child in node.children.items():
+                q = -child.value
+                if child.pending > 0:
+                    q -= self._VL * child.pending
+                score = q + self.cfg.c_puct * child.prior * math.sqrt(parent_visits) / (1 + child.visits)
+                if score > best_score:
+                    best_score, best = score, [a]
+                elif score == best_score:
+                    best.append(a)
+            if not best:
+                return None, None  # every child pending: pass short
+            best_a = best[int(torch.randint(len(best), (1,)).item())]
+            path.append((node, best_a))
+            node = self._materialize(node, best_a)
+        # Completed descent: charge the virtual loss along the path now.
+        for parent, a in path:
+            child = parent.children[a]
+            child.pending += 1
+        return path, node
+
+    def _reconcile(self, path, leaf: Node, value: float):
+        """Remove virtual-loss penalties along `path` and backprop `value`
+        (from leaf's perspective)."""
+        for parent, a in path:
+            child = parent.children[a]
+            child.pending = getattr(child, "pending", 0) - 1
+        self._backprop(path, leaf, value)
+
+    def _evaluate_batch(self, batch, stats: dict):
+        leaves = [leaf for _path, leaf in batch]
+        priors, values = self.evaluator([leaf.state for leaf in leaves])
+        expanded = set()
+        for (path, leaf), prior, value in zip(batch, priors, values):
+            v = float(value)
+            if id(leaf) not in expanded:
+                expanded.add(id(leaf))
+                self._expand(leaf, prior, v, stats)
+            self._reconcile(path, leaf, v)
 
     def _select(self, root: Node, pending: dict):
         """Descend by UCB to an unexpanded leaf, skipping queued (pending) leaves.

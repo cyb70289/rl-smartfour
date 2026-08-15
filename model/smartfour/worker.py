@@ -52,10 +52,17 @@ class Worker:
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description="Serve smart-four moves over JSON lines")
     parser.add_argument("--checkpoint", required=True)
+    parser.add_argument("--device", default=None,
+                        choices=("auto", "cpu", "mps", "cuda"),
+                        help="inference device (default: $SMARTFOUR_DEVICE or auto)")
     args = parser.parse_args(argv)
 
-    agent = SmartFourAgent(args.checkpoint)
-    print(json.dumps({"ready": True, "iteration": agent.iteration}), flush=True)
+    agent = SmartFourAgent(args.checkpoint, device=args.device)
+    print(json.dumps({
+        "ready": True,
+        "iteration": agent.iteration,
+        "device": agent.device,
+    }), flush=True)
 
     worker = Worker(agent)
     for line in sys.stdin:

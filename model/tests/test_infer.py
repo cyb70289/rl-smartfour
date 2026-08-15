@@ -10,7 +10,7 @@ from smartfour.infer import SmartFourAgent
 from smartfour.network import ResNet
 
 
-def make_agent(tmp_path, seed=0):
+def make_agent(tmp_path, seed=0, device="cpu"):
     from dataclasses import asdict
 
     torch.manual_seed(seed)
@@ -19,7 +19,7 @@ def make_agent(tmp_path, seed=0):
     net = ResNet(net_cfg)
     path = tmp_path / "net.pt"
     torch.save({"net_state": net.state_dict(), "iteration": 1, "network": asdict(net_cfg)}, path)
-    return SmartFourAgent(str(path))
+    return SmartFourAgent(str(path), device=device)
 
 
 def test_json_state_round_trip():
@@ -57,9 +57,10 @@ def test_choose_move_accepts_json_state(tmp_path):
 def test_choose_move_policy_only_is_argmax(tmp_path):
     agent = make_agent(tmp_path)
     s = initial_state()
-    logits, _ = agent.net(agent._encode(s).unsqueeze(0))
+    logits, _ = agent.net(agent._encode(s).unsqueeze(0).to(agent.device))
     mask = agent._mask(s)
-    expected = int(torch.argmax(torch.where(mask.bool(), logits[0], torch.full_like(logits[0], -1e9))).item())
+    expected = int(torch.argmax(torch.where(
+        mask.bool(), logits[0].cpu(), torch.full_like(logits[0].cpu(), -1e9))).item())
     from smartfour.encode import action_to_xyz
 
     move = agent.choose_move(s, simulations=0)

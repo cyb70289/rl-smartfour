@@ -107,7 +107,8 @@ def spawn_worker(tmp_path):
     make_checkpoint(ckpt)
     root = Path(__file__).resolve().parent.parent
     return subprocess.Popen(
-        [sys.executable, "-m", "smartfour.worker", "--checkpoint", str(ckpt)],
+        [sys.executable, "-m", "smartfour.worker", "--checkpoint", str(ckpt),
+         "--device", "cpu"],
         cwd=root,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,

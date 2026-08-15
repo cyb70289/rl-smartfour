@@ -188,25 +188,44 @@ self-play games and ships the samples back over a queue, and the trainer
 collects exactly `selfplay_games` games. The arena parallelizes the same way
 with the same `workers` count: slot 0 = candidate, slot 1 = best, colors
 alternate by global game index, per-game results ship over a queue, and the
-trainer collects exactly `eval_games` games. Inference remains
-single-process and CPU-only.
+trainer collects exactly `eval_games` games. Training uses the sequential
+searcher; the UI uses the batched one below.
 
-Inference
----------
+Inference (UI path, GPU-accelerated)
+------------------------------------
 `smartfour/infer.py` — `SmartFourAgent` loads a checkpoint and returns a move
 `(x, z)` for a game state given as a `GameState` or as JSON in the UI
 interchange format (`game.state_to_json`): `grid[x][z][y]` with 0/1/null,
 `pieces_left`, `current`, `winner`. `simulations=0` is policy-only (no
 search), which is what the UI's "disable search" mode uses.
 
+The device comes from `--device {auto,cpu,mps,cuda}` or `$SMARTFOUR_DEVICE`
+(default auto: cuda -> mps -> cpu); requesting an unavailable device is a
+hard error. The net loads onto the device once.
+
+For `simulations > 0` the agent runs the **virtual-loss batched searcher**
+(`MCTS(batched=True)`): each selection pass descends up to
+`batch_eval_size` (default 128) leaves, charging a temporary loss along
+every pending path so PUCT steers consecutive descents to different lines,
+then evaluates all pending leaves in ONE net forward (states stacked once,
+one host->device transfer, legality mask + softmax on device, one transfer
+back). Same PUCT math, priors, and net as the sequential searcher — only
+traversal order differs. At 400 sims it beat the sequential searcher 62-38
+in a 100-game arena (equal net, equal sims), and single-move latency on an
+M4 drops ~2.4-4x (e.g. 2000 sims: 1237ms CPU-sequential -> 312ms MPS).
+Training keeps the sequential searcher until the batched one is validated
+there separately.
+
 `smartfour/worker.py` — the persistent bridge worker for the UI. It loads the
-checkpoint once, prints `{"ready": true, ...}`, then serves one request per
+checkpoint once (on the selected device), prints `{"ready": true, ...,
+"device": "..."}`, then serves one request per
 line on stdin/stdout as newline-delimited JSON: requests are
 `{"id": n, "state": <state_to_json>, "simulations": m}`, responses are
 `{"id": n, "move": {"x", "z"}}` (or `{"move": null}` on a terminal state);
 errors are reported in-band as `{"id": n, "error": "..."}` and the loop keeps
 serving. The Vite plugin in `ui/plugins/` spawns it and exposes
-`POST /api/think` to the browser.
+`POST /api/think` to the browser; set `SMARTFOUR_DEVICE` in the server
+environment to pin its device (the bridge forwards the environment).
 
 Running
 -------

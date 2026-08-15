@@ -433,6 +433,6 @@ def test_config_loads_from_toml():
     assert cfg.mcts.batch_eval_size == 128
     assert cfg.training.selfplay_games == 100
     assert cfg.training.workers == 8
-    assert cfg.training.pretrain_games == 20000
-    assert cfg.training.pretrain_epochs == 64
+    assert cfg.training.pretrain_games == 4000
+    assert cfg.training.pretrain_epochs == 16
     assert cfg.device.name == "auto"
