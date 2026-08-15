@@ -4,10 +4,10 @@ import { stackHeight } from '../game/rules';
 import { BOARD_SIZE, STACK_HEIGHT } from '../game/types';
 import type { GameState, Player } from '../game/types';
 
-const CELL = 1.15 * Math.SQRT2; // board 2x in area
+const CELL = 1.15 * Math.SQRT2;
 const BASE_Y = 0.18;
-const PIECE_H = 0.45; // 1.5x taller
-const PIECE_R = 0.36 / Math.SQRT2; // 1/2 footprint area
+const PIECE_H = 0.45;
+const PIECE_R = 0.36;
 /** Picker target radius: the piece's visible footprint (1:1 with the ghost). */
 const PICK_R = PIECE_R * 0.92;
 /** Picker thickness: a thin disc sitting on the placement surface. */
