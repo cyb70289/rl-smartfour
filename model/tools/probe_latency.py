@@ -2,10 +2,7 @@
 
 Machine plays WHITE every other ply (the human side is a fast random move),
 through the same MCTS call the worker's choose_move makes. Reports mean ms
-per machine move for:
-  old  = sequential searcher, CPU (the pre-change UI path)
-  newC = virtual-loss searcher, CPU
-  newM = virtual-loss searcher, MPS
+per machine move on CPU vs the accelerator device, at UI effort levels.
 """
 import random
 import sys
@@ -32,25 +29,22 @@ def load_net(device):
     return net
 
 
-def machine_move(net, state, sims, batched, device):
-    cfg = MCTSConfig(
-        simulations=sims,
-        batch_eval_size=128 if batched else 32,
-    )
-    m = MCTS(net, cfg, device=device, batched=batched)
+def machine_move(net, state, sims, device):
+    cfg = MCTSConfig(simulations=sims, batch_eval_size=128)
+    m = MCTS(net, cfg, device=device)
     _pi, chosen, _r = m.root_policy(state, root_noise=False, temperature=0.0)
     x, z, _y = action_to_xyz(chosen)
     return x, z
 
 
-def play_game(net, sims, batched, device, rng):
+def play_game(net, sims, device, rng):
     state = initial_state()
     machine_ms = 0.0
     machine_moves = 0
     while not is_terminal(state):
         if state.current == 0:  # machine is white
             t0 = time.perf_counter()
-            x, z = machine_move(net, state, sims, batched, device)
+            x, z = machine_move(net, state, sims, device)
             machine_ms += time.perf_counter() - t0
             machine_moves += 1
         else:
@@ -62,16 +56,13 @@ def play_game(net, sims, batched, device, rng):
 if __name__ == "__main__":
     rng = random.Random(7)
     nets = {"cpu": load_net("cpu")}
+    devices = ["cpu"]
     if torch.backends.mps.is_available():
         nets["mps"] = load_net("mps")
-        _ = machine_move(nets["mps"], initial_state(), 8, True, "mps")  # warm
-    print(f"{'effort':>7} {'old-CPU':>10} {'new-CPU':>10} {'new-MPS':>10}")
+        devices.append("mps")
+        _ = machine_move(nets["mps"], initial_state(), 8, "mps")  # warm
+    header = "".join(f"{d:>10}" for d in devices)
+    print(f"{'effort':>7} {header}")
     for sims in (100, 400, 800, 2000):
-        ms_old, _ = play_game(nets["cpu"], sims, False, "cpu", rng)
-        ms_new, _ = play_game(nets["cpu"], sims, True, "cpu", rng)
-        if "mps" in nets:
-            ms_mps, _ = play_game(nets["mps"], sims, True, "mps", rng)
-            mps = f"{ms_mps:>9.0f}m"
-        else:
-            mps = f"{'-':>10}"
-        print(f"{sims:>7} {ms_old:>9.0f}m {ms_new:>9.0f}m {mps}")
+        row = [f"{play_game(nets[d], sims, d, rng)[0]:>9.0f}m" for d in devices]
+        print(f"{sims:>7} " + " ".join(row))
