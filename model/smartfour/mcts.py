@@ -4,12 +4,11 @@ Every node stores values from its OWN perspective (the player to move at that
 node): the net evaluates the current-player encoding, priors are masked to
 legal actions, and backpropagation flips the value sign at each level.
 
-Batching: each selection pass descends up to `batch_eval_size` leaves,
-charging a temporary virtual loss along every pending path so PUCT steers
-consecutive descents to different lines, then evaluates all pending leaves
-in ONE net forward and reconciles (penalties removed, values backpropagated).
-Same PUCT math, priors, and net as the original sequential searcher; only
-traversal order differs. One searcher serves training and inference.
+Batching: the search queues up to `batch_eval_size` leaves before each
+net forward. Queued leaves are skipped during descent, and a pass drains as
+soon as every child of the reached node is queued — selection dynamics are
+identical to a one-leaf-at-a-time searcher; only evaluation is batched.
+One searcher serves training and inference.
 
 Evaluation seam: `evaluator` maps a list of GameStates to (priors, values),
 where priors is an (N, 125) float tensor already softmaxed over each state's
@@ -57,7 +56,7 @@ class LocalEvaluator:
 
 
 class Node:
-    __slots__ = ("state", "legal", "prior", "children", "visits", "value_sum", "terminal", "pending")
+    __slots__ = ("state", "legal", "prior", "children", "visits", "value_sum", "terminal")
 
     def __init__(self, state, legal, prior=None):
         self.state = state
@@ -67,7 +66,6 @@ class Node:
         self.visits = 0
         self.value_sum = 0.0
         self.terminal = None          # None | float from this node's perspective
-        self.pending = 0              # virtual-loss: visits pending this pass
 
     @property
     def value(self) -> float:
@@ -77,14 +75,13 @@ class Node:
 class _ChildStub:
     """Unmaterialized child: only the parent's prior. Becomes a Node on
     first descent (see MCTS._materialize)."""
-    __slots__ = ("prior", "visits", "value_sum", "terminal", "pending")
+    __slots__ = ("prior", "visits", "value_sum", "terminal")
 
     def __init__(self, prior: float):
         self.prior = prior
         self.visits = 0
         self.value_sum = 0.0
         self.terminal = None
-        self.pending = 0
 
     @property
     def value(self) -> float:
@@ -190,49 +187,52 @@ class MCTS:
         p = prior[torch.tensor(legal, dtype=torch.long)]
         return float(-(p * torch.log2(p + 1e-12)).sum())
 
-    # Virtual-loss value charged to every node on a pending path, from that
-    # node's own perspective (a pending visit looks like a certain loss).
-    _VL = 1.0
-
     def _run(self, root: Node, stats: dict):
-        """Virtual-loss search: each pass descends up to `target` leaves,
-        charging a temporary loss along each pending path so PUCT steers the
-        next descent to a different line, then evaluates all pending leaves
-        in one net forward and reconciles (penalties removed, values
-        backpropagated). `target` = max(batch_eval_size, 8) bounded by
-        remaining sims — small searches stay small, big searches fill
-        device-sized batches.
+        """Batched search with OLD-selection semantics: queue up to
+        `batch_eval_size` distinct leaves per pass — a queued leaf is
+        SKIPPED during descent (not merely penalized), and the pass drains
+        the moment every child of the reached node is queued, so visit
+        counts refresh between passes exactly like the original sequential
+        searcher. All queued leaves are then evaluated in ONE net forward.
+
+        (An earlier revision charged a virtual-loss penalty instead of
+        skipping; with near-uniform q — early training — penalties re-tie
+        all children, descents re-reached queued leaves, and duplicate
+        visits flattened the root policy toward uniform, poisoning policy
+        targets: games collapsed to ~16-20 plies. Skipping reproduces the
+        proven dynamics while keeping batched evaluation.)
         """
         target = max(int(self.cfg.batch_eval_size), 8)
         sims = 0
         while sims < self.cfg.simulations:
             k = min(target, self.cfg.simulations - sims)
-            batch = []          # (path, leaf) pairs, pending this pass
+            pending = {}      # id(leaf) -> leaf, queued this pass
+            order = []        # (path, leaf) per simulation, for backprop
             for _ in range(k):
-                path, leaf = self._descend_vl(root)
-                if leaf is None:
-                    break       # whole tree is pending/terminal-blocked
+                path, leaf, blocked = self._select(root, pending)
+                if blocked:
+                    break     # every child queued: drain, refresh Q
                 sims += 1
                 stats["sims_done"] = sims
                 stats["depth_total"] += len(path)
                 stats["max_depth"] = max(stats["max_depth"], len(path))
                 stats["leaf_states"].add(state_key(leaf.state))
                 if leaf.terminal is not None:
-                    # Terminal: value known, reconcile immediately.
                     stats["terminal_hits"] += 1
-                    self._reconcile(path, leaf, leaf.terminal)
+                    self._backprop(path, leaf, leaf.terminal)
                 else:
-                    batch.append((path, leaf))
-            if batch:
-                self._evaluate_batch(batch, stats)
-                stats["net_forwards"] += 1
-                stats["batch_sizes"].append(len(batch))
+                    pending.setdefault(id(leaf), leaf)
+                    order.append((path, leaf))
+            if order:
+                self._drain(order, pending, stats)
 
-    def _descend_vl(self, root: Node):
-        """One PUCT descent with virtual loss on pending paths. Returns
-        (path, leaf); (None, None) when no unblocked leaf exists. Penalties
-        are charged only on a completed descent — an aborted one (every
-        child of some node pending) must leave no trace."""
+    def _select(self, root: Node, pending: dict):
+        """Descend by PUCT to an unqueued leaf, SKIPPING queued leaves.
+
+        Returns (path, leaf, blocked): blocked=True when every child of the
+        reached node is queued, so the pass must drain and refresh before
+        the search can go deeper. Descending into a stub materializes it.
+        """
         path = []
         node = root
         while node.children is not None:
@@ -240,43 +240,36 @@ class MCTS:
             best = []
             parent_visits = node.visits
             for a, child in node.children.items():
-                q = -child.value
-                if child.pending > 0:
-                    q -= self._VL * child.pending
+                if id(child) in pending:
+                    continue  # queued this pass: skip until drain
+                q = -child.value  # child's perspective is the opponent's
                 score = q + self.cfg.c_puct * child.prior * math.sqrt(parent_visits) / (1 + child.visits)
                 if score > best_score:
                     best_score, best = score, [a]
                 elif score == best_score:
                     best.append(a)
             if not best:
-                return None, None  # every child pending: pass short
+                return path, node, True  # blocked: all children queued
             best_a = best[int(torch.randint(len(best), (1,)).item())]
             path.append((node, best_a))
             node = self._materialize(node, best_a)
-        # Completed descent: charge the virtual loss along the path now.
-        for parent, a in path:
-            child = parent.children[a]
-            child.pending += 1
-        return path, node
+        return path, node, False
 
-    def _reconcile(self, path, leaf: Node, value: float):
-        """Remove virtual-loss penalties along `path` and backprop `value`
-        (from leaf's perspective)."""
-        for parent, a in path:
-            child = parent.children[a]
-            child.pending -= 1
-        self._backprop(path, leaf, value)
-
-    def _evaluate_batch(self, batch, stats: dict):
-        leaves = [leaf for _path, leaf in batch]
+    def _drain(self, order, pending, stats: dict):
+        """Evaluate every queued leaf in one forward, expand once per leaf,
+        backprop per simulation."""
+        leaves = list(pending.values())
         priors, values = self.evaluator([leaf.state for leaf in leaves])
+        value_of = {id(leaf): float(v) for leaf, v in zip(leaves, values)}
+        leaf_idx = {id(l): i for i, l in enumerate(leaves)}
+        stats["net_forwards"] += 1
+        stats["batch_sizes"].append(len(leaves))
         expanded = set()
-        for (path, leaf), prior, value in zip(batch, priors, values):
-            v = float(value)
+        for path, leaf in order:
             if id(leaf) not in expanded:
                 expanded.add(id(leaf))
-                self._expand(leaf, prior, v, stats)
-            self._reconcile(path, leaf, v)
+                self._expand(leaf, priors[leaf_idx[id(leaf)]], value_of[id(leaf)], stats)
+            self._backprop(path, leaf, value_of[id(leaf)])
 
     def _materialize(self, node: Node, a: int) -> Node:
         """Build the real child for action `a` from its stub."""
