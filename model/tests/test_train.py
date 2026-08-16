@@ -8,7 +8,7 @@ import torch
 from smartfour.arena import play_arena
 from smartfour.config import Config, MCTSConfig, NetworkConfig, TrainingConfig
 from smartfour.encode import action_mask, apply_d4, apply_d4_policy, d4_perms, encode
-from smartfour.game import BLACK, WHITE, apply_move, initial_state, legal_moves
+from smartfour.game import WHITE, apply_move, initial_state, legal_moves
 from smartfour.network import ResNet, loss_fn
 from smartfour.train import ReplayBuffer, Trainer, plys_postfix
 
@@ -18,7 +18,7 @@ def tiny_training(**kw):
     kw.setdefault("workers", 1)  # unit tests stay sequential
     kw.setdefault("train_epochs", 5)
     kw.setdefault("batch_size", 8)
-    kw.setdefault("replay_capacity", 10_000)
+    kw.setdefault("replay_capacity_games", 10_000)
     kw.setdefault("learning_rate", 0.001)
     kw.setdefault("weight_decay", 0.0)
     kw.setdefault("symmetry_augment", True)
@@ -127,14 +127,65 @@ def test_buffer_augment_consistent_with_d4():
         assert z[i, 0] == 1.0
 
 
-def test_buffer_capacity_evicts_oldest():
-    buf = ReplayBuffer(4)
+def game_samples(seed_state, n):
+    """n samples standing in for one game's positions."""
+    s = seed_state
+    out = []
+    for _ in range(n):
+        out.append((encode(s), uniform_pi(s), s.current, 1.0))
+        x, z = legal_moves(s)[0]
+        s = apply_move(s, x, z)
+    return out
+
+
+def test_buffer_capacity_evicts_whole_games():
+    """Capacity counts games: pushing a 6th game into a capacity-5 buffer
+    evicts the entire 1st game, never splits one."""
+    buf = ReplayBuffer(5)
     states = some_states()
-    samples = [(encode(s), uniform_pi(s), s.current, 1.0) for s in states]
-    buf.push(samples)
-    assert len(buf) == 4
-    buf.push([(encode(initial_state()), uniform_pi(initial_state()), WHITE, 0.0)])
-    assert len(buf) == 4  # evicted the oldest
+    for i, s in enumerate(states):
+        buf.push(game_samples(s, 2 + i))  # games of 2,3,4,5,6 samples
+    assert buf.games == 5
+    assert len(buf) == 2 + 3 + 4 + 5 + 6
+    buf.push(game_samples(initial_state(), 3))
+    assert buf.games == 5
+    assert len(buf) == 3 + 4 + 5 + 6 + 3  # the first game (2 samples) is gone
+
+
+def test_buffer_sample_only_from_retained_games():
+    buf = ReplayBuffer(2)
+    states = some_states()
+    for s in states:
+        buf.push(game_samples(s, 3))
+    old = [encode(states[0]), encode(states[1]), encode(states[2])]
+    for _ in range(20):
+        s, pi, z = buf.sample(8, augment=False)
+        for i in range(8):
+            assert not any((s[i] == o).all() for o in old)
+
+
+def test_buffer_state_load_round_trip_preserves_games():
+    buf = ReplayBuffer(10)
+    for i, s in enumerate(some_states()):
+        buf.push(game_samples(s, 2 + i))
+    buf2 = ReplayBuffer(10)
+    buf2.load_state(buf.state())
+    assert buf2.games == buf.games
+    assert len(buf2) == len(buf)
+    # Same flat contents in the same order.
+    a, b = buf.state(), buf2.state()
+    assert a[3] == b[3]
+    for x, y in zip(a[0], b[0]):
+        assert torch.equal(x, y)
+
+
+def test_buffer_load_rejects_ply_based_state():
+    """Legacy ply-based checkpoints (3-tuple buffer state) hard-error with a
+    --restart hint instead of silently mis-splitting games."""
+    buf = ReplayBuffer(10)
+    samples = game_samples(initial_state(), 4)
+    with pytest.raises(SystemExit, match="--restart"):
+        buf.load_state((samples[0][0], samples[0][1], samples[0][3]))
 
 
 # ---------------------------------------------------------------- checkpointing
@@ -431,8 +482,9 @@ def test_config_loads_from_toml():
     assert cfg.network.blocks == 16
     assert cfg.mcts.simulations == 500
     assert cfg.mcts.batch_eval_size == 128
-    assert cfg.training.selfplay_games == 100
+    assert cfg.training.selfplay_games == 1000
     assert cfg.training.workers == 8
-    assert cfg.training.pretrain_games == 4000
+    assert cfg.training.replay_capacity_games == 10_000
+    assert cfg.training.pretrain_games == 5000
     assert cfg.training.pretrain_epochs == 16
     assert cfg.device.name == "auto"

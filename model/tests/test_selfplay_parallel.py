@@ -179,7 +179,7 @@ def make_config(tmp_path, **kw):
     defaults = dict(
         train_epochs=1,
         batch_size=16,
-        replay_capacity=10_000,
+        replay_capacity_games=10_000,
         learning_rate=0.001,
         weight_decay=0.0,
         symmetry_augment=True,
@@ -289,7 +289,9 @@ def test_trainer_selfplay_with_workers(tmp_path, monkeypatch):
     t = Trainer(cfg)
     t._selfplay(t.net)
     assert len(t.buffer) > 0
-    for s, pi, z in zip(t.buffer._s, t.buffer._pi, t.buffer._z):
+    states, pis, zs, lens = t.buffer.state()
+    assert sum(lens) == len(states) == len(t.buffer)
+    for s, pi, z in zip(states, pis, zs):
         assert s.shape == (16, 5, 5)
         assert pi.shape == (125,)
         assert abs(pi.sum().item() - 1.0) < 1e-6

@@ -100,8 +100,11 @@ Training
 `smartfour/train.py` — per iteration:
 
 1. self-play `selfplay_games` games (MCTS with root noise and temperature)
-2. store `(state, pi, z)` in a replay buffer; `z` is the outcome from each
-   stored position's own perspective (+1 win, -1 loss, 0 draw)
+2. store `(state, pi, z)` in a replay buffer that keeps the last
+   `replay_capacity_games` *whole games* (AlphaZero-style games window —
+   games are evicted FIFO, never split, so no sample is older than
+   `replay_capacity_games / selfplay_games` iterations); `z` is the outcome
+   from each stored position's own perspective (+1 win, -1 loss, 0 draw)
 3. optimize for `train_epochs` over sampled batches: policy cross-entropy +
    value MSE + L2 (AdamW); the net is switched back to train mode first so
    BatchNorm running statistics actually update (MCTS leaves it in eval mode);

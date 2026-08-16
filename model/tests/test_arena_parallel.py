@@ -43,7 +43,7 @@ def make_config(tmp_path, **kw):
     defaults = dict(
         train_epochs=1,
         batch_size=16,
-        replay_capacity=10_000,
+        replay_capacity_games=10_000,
         learning_rate=0.001,
         weight_decay=0.0,
         symmetry_augment=True,

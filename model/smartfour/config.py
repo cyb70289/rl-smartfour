@@ -32,7 +32,7 @@ class TrainingConfig:
                       # the CPU count at startup (1 = sequential)
     train_epochs: int = 5
     batch_size: int = 128
-    replay_capacity: int = 100_000
+    replay_capacity_games: int = 2_000  # replay buffer window, in whole games
     learning_rate: float = 0.001
     weight_decay: float = 0.0001
     symmetry_augment: bool = True

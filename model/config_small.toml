@@ -22,7 +22,7 @@ selfplay_games = 50
 workers = 8  # parallel self-play and arena processes (1 = sequential)
 train_epochs = 5
 batch_size = 128
-replay_capacity = 100000
+replay_capacity_games = 1000  # replay buffer window in whole games
 learning_rate = 0.001
 weight_decay = 0.0001
 symmetry_augment = true

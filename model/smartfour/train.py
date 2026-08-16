@@ -30,6 +30,7 @@ import signal
 import sys
 import tempfile
 import time
+from bisect import bisect_right
 from dataclasses import asdict, replace
 from pathlib import Path
 
@@ -186,33 +187,55 @@ def _delete_files(files, total: int) -> None:
 
 
 class ReplayBuffer:
-    """Stores (state_tensor, pi, z); samples batches with optional D4 augmentation."""
+    """Stores (state, pi, z) grouped by game and keeps the last `capacity`
+    *games* whole (AlphaZero-style games window): eviction never splits a
+    game, and no sample is older than capacity / selfplay_games iterations.
+    One push() is one game's samples."""
 
     def __init__(self, capacity: int):
-        self.capacity = capacity
-        self._s = []
-        self._pi = []
-        self._z = []
+        self.capacity = capacity              # in games
+        self._games: list = []                # per game: (states, pis, zs)
+        self._starts: list = []               # absolute start index per game
+        self._next = 0                        # absolute index of the next push
+        self._total = 0                       # samples currently stored
 
     def push(self, samples) -> None:
-        for s, pi, _player, z in samples:
-            self._s.append(s)
-            self._pi.append(pi)
-            self._z.append(z)
-        if len(self._s) > self.capacity:
-            drop = len(self._s) - self.capacity
-            del self._s[:drop]
-            del self._pi[:drop]
-            del self._z[:drop]
+        """Append one game's samples; whole games are evicted FIFO once
+        more than `capacity` are held."""
+        if samples:
+            states, pis, zs = zip(*((s, pi, z) for s, pi, _p, z in samples))
+            self._games.append((list(states), list(pis), list(zs)))
+            self._starts.append(self._next)
+            self._next += len(samples)
+            self._total += len(samples)
+        self._trim()
 
     def __len__(self) -> int:
-        return len(self._s)
+        return self._total
+
+    @property
+    def games(self) -> int:
+        return len(self._games)
+
+    def _trim(self) -> None:
+        while len(self._games) > self.capacity:
+            self._total -= len(self._games[0][0])
+            self._games.pop(0)
+            self._starts.pop(0)
+
+    def _locate(self, i: int):
+        """The i-th stored sample in insertion (oldest-first) order."""
+        first = self._starts[0]
+        g = bisect_right(self._starts, i + first) - 1
+        states, pis, zs = self._games[g]
+        return states[i + first - self._starts[g]], pis[i + first - self._starts[g]], zs[i + first - self._starts[g]]
 
     def sample(self, batch_size: int, augment: bool = True):
-        idx = torch.randint(len(self), (batch_size,))
-        s = torch.stack([self._s[i] for i in idx])
-        pi = torch.stack([self._pi[i] for i in idx])
-        z = torch.tensor([[self._z[i]] for i in idx], dtype=torch.float32)
+        idx = torch.randint(len(self), (batch_size,)).tolist()
+        picked = [self._locate(i) for i in idx]
+        s = torch.stack([x[0] for x in picked])
+        pi = torch.stack([x[1] for x in picked])
+        z = torch.tensor([x[2] for x in picked], dtype=torch.float32).unsqueeze(1)
         if augment:
             perms = d4_perms()
             for i in range(batch_size):
@@ -222,10 +245,40 @@ class ReplayBuffer:
         return s, pi, z
 
     def state(self):
-        return self._s, self._pi, self._z
+        """Flat (states, pis, zs, game_lengths) for checkpointing."""
+        states, pis, zs, lens = [], [], [], []
+        for g_states, g_pis, g_zs in self._games:
+            states.extend(g_states)
+            pis.extend(g_pis)
+            zs.extend(g_zs)
+            lens.append(len(g_states))
+        return states, pis, zs, lens
 
     def load_state(self, state) -> None:
-        self._s, self._pi, self._z = state
+        if len(state) != 4:
+            raise SystemExit(
+                "ERROR: checkpoint replay buffer is ply-based (older trainer "
+                "format); this version keeps whole games.\n"
+                "  Run with --restart to wipe the checkpoint dir and start fresh."
+            )
+        states, pis, zs, lens = state
+        if sum(lens) != len(states) or len(pis) != len(states) or len(zs) != len(states):
+            raise SystemExit(
+                f"ERROR: replay buffer game lengths sum to {sum(lens)} against "
+                f"{len(states)} samples; corrupt checkpoint."
+            )
+        self._games = []
+        self._starts = []
+        self._next = 0
+        self._total = 0
+        pos = 0
+        for n in lens:
+            self._games.append((states[pos:pos + n], pis[pos:pos + n], zs[pos:pos + n]))
+            self._starts.append(self._next)
+            self._next += n
+            self._total += n
+            pos += n
+        self._trim()
 
 
 class Trainer:
@@ -241,7 +294,7 @@ class Trainer:
             lr=cfg.training.learning_rate,
             weight_decay=cfg.training.weight_decay,
         )
-        self.buffer = ReplayBuffer(cfg.training.replay_capacity)
+        self.buffer = ReplayBuffer(cfg.training.replay_capacity_games)
         self.iteration = 0          # last *completed* iteration
         self.best_iteration = 0     # iteration whose net is the current best
         self.checkpoint_dir = Path(cfg.training.checkpoint_dir)
@@ -603,6 +656,7 @@ class Trainer:
         return {
             "iteration": self.iteration,
             "buffer_size": len(self.buffer),
+            "buffer_games": self.buffer.games,
             "loss_mean": loss_mean,
             "policy_loss": policy_loss,
             "value_loss": value_loss,
@@ -671,7 +725,7 @@ class Trainer:
                     tqdm.write(
                         f"iter {s['iteration']:3d}  loss {s['loss_mean']:.4f}"
                         f" (pol {s['policy_loss']:.3f} val {s['value_loss']:.3f})  "
-                        f"buffer {s['buffer_size']}  "
+                        f"buffer {s['buffer_size']} ({s['buffer_games']}g)  "
                         f"arena {s['arena_wins']}W/{s['arena_losses']}L/{s['arena_draws']}D"
                         f" ({s['arena_ratio']:.2f}) "
                         f"{s['arena_plies'] // max(1, s['arena_wins'] + s['arena_losses'] + s['arena_draws'])}ply/g  "
