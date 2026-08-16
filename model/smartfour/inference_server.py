@@ -28,10 +28,11 @@ import json
 import multiprocessing as mp
 import pickle
 import signal
+import sys
 import threading
+import time
 
 import torch
-
 from .config import NetworkConfig
 from .device import resolve_device
 from .network import ResNet
@@ -137,7 +138,18 @@ def _serve(listener, nets, device):
                 else:
                     _send_json(conn, {"t": "error", "msg": f"unknown type {kind!r}"})
         except (EOFError, OSError, ConnectionResetError):
-            pass  # client died; drop the connection
+            pass  # client died / connection closed
+        finally:
+            # Always release the socket: worker generations come and go and
+            # each leaked fd would otherwise accumulate across iterations
+            # until accept() hits EMFILE and kills the server (observed as
+            # arena workers failing with a bare EOFError around iteration
+            # 10 at ~24 sockets/iteration against the 256-fd soft limit).
+            conns.pop(conn, None)
+            try:
+                conn.close()
+            except Exception:
+                pass
     try:
         while not stop.is_set():
             try:
@@ -147,14 +159,20 @@ def _serve(listener, nets, device):
             except OSError as exc:
                 if stop.is_set():
                     break
-                # Transient accept errors (e.g. ECONNABORTED when a peer
-                # dies mid-handshake) must not kill the server.
                 import errno
                 if exc.errno in (errno.ECONNABORTED, errno.EINTR, errno.EAGAIN):
                     continue
-                break  # listener itself is gone
-            conns[conn] = threading.Thread(target=reader, args=(conn,), daemon=True)
-            conns[conn].start()
+                if exc.errno in (errno.EMFILE, errno.ENFILE):
+                    # fd table full: wait for reader threads to release
+                    # dead worker connections, then retry — never die.
+                    time.sleep(0.05)
+                    continue
+                print(f"inference server: accept failed: {exc}", file=sys.stderr,
+                      flush=True)
+                break
+            t = threading.Thread(target=reader, args=(conn,), daemon=True)
+            conns[conn] = t
+            t.start()
     finally:
         stop.set()
         with cond:
