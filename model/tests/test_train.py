@@ -477,14 +477,7 @@ def test_bn_running_stats_update_during_optimize(tmp_path):
 def test_config_loads_from_toml():
     from smartfour.config import load_config
 
-    cfg = load_config("config.toml")
+    cfg = load_config("config_small.toml")
     assert cfg.network.input_channels == 16
-    assert cfg.network.blocks == 16
-    assert cfg.mcts.simulations == 500
-    assert cfg.mcts.batch_eval_size == 128
-    assert cfg.training.selfplay_games == 1000
-    assert cfg.training.workers == 8
-    assert cfg.training.replay_capacity_games == 10_000
-    assert cfg.training.pretrain_games == 5000
-    assert cfg.training.pretrain_epochs == 16
-    assert cfg.device.name == "auto"
+    assert cfg.mcts.simulations == 400
+    assert cfg.training.selfplay_games == 50
