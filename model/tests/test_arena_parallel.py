@@ -81,10 +81,9 @@ def test_arena_worker_plays_assigned_games():
     torch.manual_seed(0)
     net_cfg = tiny_net_cfg()
     net = ResNet(net_cfg)
-    # fork (not spawn): the child inherits the already-imported torch, so the
-    # probe costs ~0.1s instead of a ~3s re-import per spawn. Production
-    # keeps spawn; this only exercises the worker function itself.
-    ctx = mp.get_context("fork")
+    # Match production: forking after PyTorch has used its native thread pool
+    # can deadlock the child before it reports a result.
+    ctx = mp.get_context("spawn")
     q = ctx.Queue()
     p = ctx.Process(
         target=arena_worker,
@@ -112,7 +111,7 @@ def test_arena_worker_continues_color_schedule_from_start():
     torch.manual_seed(0)
     net_cfg = tiny_net_cfg()
     net = ResNet(net_cfg)
-    ctx = mp.get_context("fork")
+    ctx = mp.get_context("spawn")
     q = ctx.Queue()
     p = ctx.Process(
         target=arena_worker,
@@ -133,7 +132,7 @@ def test_arena_worker_continues_color_schedule_from_start():
 
 def test_arena_worker_reports_failure_in_band():
     """A worker crash (bad net state) surfaces as an error marker, not a hang."""
-    ctx = mp.get_context("fork")
+    ctx = mp.get_context("spawn")
     q = ctx.Queue()
     bad_state = {"nope": torch.zeros(1)}
     p = ctx.Process(
@@ -253,11 +252,8 @@ def test_trainer_arena_with_workers(tmp_path, monkeypatch):
     torch.manual_seed(0)
     import smartfour.train as train_mod
 
-    # Exercise the parallel dispatch/collection path without the ~3s
-    # torch re-import per spawned worker; the spawn context itself is
-    # covered by test_arena_spawns_daemonic_workers.
-    fork_ctx = mp.get_context("fork")
-    monkeypatch.setattr(train_mod.multiprocessing, "get_context", lambda name: fork_ctx)
+    spawn_ctx = mp.get_context("spawn")
+    monkeypatch.setattr(train_mod.multiprocessing, "get_context", lambda name: spawn_ctx)
     from smartfour.train import Trainer
 
     t = Trainer(make_config(tmp_path, workers=2))
