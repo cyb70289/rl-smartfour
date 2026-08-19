@@ -11,11 +11,11 @@ input_channels = 16
 blocks = 16           # residual blocks after the stem
 base_channels = 128   # stem + residual width
 policy_channels = 32  # policy head conv width
-value_channels = 16   # value head conv width
-value_fc = 64         # value head hidden layer
+value_channels = 32   # value head conv width
+value_fc = 512        # value head hidden layer
 
 [mcts]
-simulations = 500     # tree searches per move during training/eval
+simulations = 1500    # tree searches per move during training/eval
 c_puct = 2.0
 dirichlet_alpha = 0.5 # noise concentration per legal action (~25 actions)
 dirichlet_epsilon = 0.25
@@ -35,9 +35,9 @@ replay_capacity_games = 4000 # replay buffer window in whole games (AlphaZero-st
                              # 4000 games / 200 per iteration = 20 iterations of history
 learning_rate = 0.0005
 weight_decay = 0.0001
-symmetry_augment = true   # D4 augmentation at sample time
-eval_games = 40       # arena games vs best checkpoint
-arena_win_ratio = 0.55    # fraction of wins required to replace best
+symmetry_augment = true # D4 augmentation at sample time
+eval_games = 100        # arena games vs best checkpoint
+arena_win_ratio = 0.55  # fraction of wins required to replace best
 checkpoint_dir = "checkpoints"
 seed = 42
 pretrain_games = 5000  # value-head bootstrap on random-rollout outcomes
