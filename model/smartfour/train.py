@@ -63,6 +63,7 @@ def _tqdm(*args, **kwargs):
     sizes to None so the bar falls back to default formatting.
     """
     kwargs.setdefault("disable", None)  # render only on a TTY
+    kwargs.setdefault("dynamic_ncols", True)
     bar = tqdm(*args, **kwargs)
     ncols = getattr(bar, "ncols", None)
     nrows = getattr(bar, "nrows", None)
