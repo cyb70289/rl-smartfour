@@ -1,0 +1,45 @@
+# Smart-four AlphaZero model configuration.
+# All sections are read by smartfour.train / smartfour.evaluate / smartfour.infer.
+
+[device]
+name = "auto"  # auto | cpu | mps | cuda (--device overrides)
+
+[network]
+# Input channels: 15 per model.md (current/opponent planes + legality) plus
+# one constant channel = total pieces remaining / 64 (ply count to draw cap).
+input_channels = 16
+blocks = 16           # residual blocks after the stem
+base_channels = 128   # stem + residual width
+policy_channels = 32  # policy head conv width
+value_channels = 32   # value head conv width
+value_fc = 512        # value head hidden layer
+
+[mcts]
+simulations = 1500    # tree searches per move during training/eval
+c_puct = 2.0
+dirichlet_alpha = 0.5 # noise concentration per legal action (~25 actions)
+dirichlet_epsilon = 0.25
+temperature_threshold = 24  # plies with tau=1 (exploratory); later plies tau=0
+batch_eval_size = 128 # leaf evaluations queued per net forward (the central
+                      # inference server merges across workers, so this
+                      # bounds per-search latency only)
+
+[training]
+selfplay_games = 200  # games per iteration
+workers = 8           # parallel self-play and arena processes (1 = sequential);
+                      # each worker is a separate process with its own net copy;
+                      # clamped to the CPU count at startup
+train_epochs = 2      # SGD passes over sampled batches per iteration
+batch_size = 128
+replay_capacity_games = 4000 # replay buffer window in whole games (AlphaZero-style);
+                             # 4000 games / 200 per iteration = 20 iterations of history
+learning_rate = 0.0005
+weight_decay = 0.0001
+symmetry_augment = true # D4 augmentation at sample time
+eval_games = 100        # arena games vs best checkpoint
+arena_win_ratio = 0.55  # fraction of wins required to replace best
+checkpoint_dir = "checkpoints"
+seed = 42
+pretrain_games = 5000  # value-head bootstrap on random-rollout outcomes
+pretrain_epochs = 16
+pretrain_lr = 0.001

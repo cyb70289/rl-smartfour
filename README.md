@@ -21,13 +21,19 @@ centralized on one accelerator process, optimization runs on the device.
 Self-play and the arena parallelize across `workers` processes (see
 [`docs/model.md`](docs/model.md) for full command line).
 
-Quick steps to train the model:
+> [!NOTE]
+> GPU is necessary to train the model in reasonable time.
+It took 18 hours to run 100 training iterations on RTX-3060.
+
+You can download model checkpoint from
+[releases page](https://github.com/cyb70289/rl-smartfour/releases).
+Or follow steps below to train you own model:
 
 ```sh
 cd model
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m smartfour.train --config config.toml --iterations 10
+.venv/bin/python -m smartfour.train --config config.toml --iterations 100
 ```
 
 ## UI
@@ -52,5 +58,6 @@ Play against the machine or a person on the same screen; you can revert moves
 
 ## CREDIT
 
-- `DeepSeek-v4-Flash-0731` for all the coding and documentation.
-- `oh-my-pi` coding agent, without additional skills.
+- `DeepSeek-v4-Flash-0731` for design and coding.
+- `GLM-5.3` for performance improvement.
+- `oh-my-pi` harness, `grill me` skill.

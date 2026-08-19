@@ -1,0 +1,818 @@
+$ .venv/bin/python -m smartfour.train --config config.toml --iterations 100
+No checkpoint found; starting fresh
+Smart-four AlphaZero training
+  config      config.toml
+  device      cuda
+  network     16 blocks x 128 ch (5,164,582 params)
+  cpus        20 (worker counts capped at this)
+  inference   central server on cuda
+  self-play   200 games x 8 worker(s), 1500 sims/move
+  optimize    2 epochs, batch 128
+  arena       100 games vs best x 8 worker(s), 1500 sims/move
+  checkpoint  checkpoints/
+  pretrain    5000 random games x 16 epochs (value head only)
+  iterations  start iteration 1, 100 left (target 100)
+Pretraining value head on random-rollout outcomes...
+  pretrain    done in 103s, final value MSE 0.0760
+[diag it 1] plies avg=13.69 med=12 min=7 max=64 | W=116 B=84 D=0
+[diag it 1] ply hist (upper-exclusive) 8:12 9:9 10:24 11:22 12:26 13:17 14:15 15:10 16:17 17:9 18:6 19:7 20:7 24:10 30:3 40:3 65:3
+[diag it 1] mcts depth avg=2.5 max=6 | leaves/search=1223.0 | nodes/search=1287.7 | terminal hits/game=2826.7 | batch mean=28.4
+[diag it 1] mcts root width=24.9/25 | visit entropy=3.63 bits | chosen prob=0.21 | net policy entropy=4.63 bits
+[diag it 1] net root value mean=-0.00 |v|=0.18 |v|>0.9=0.0% | v*z align=0.13 | |v-z|=0.87
+[diag it 1] states/game=13573 | cross-game dup=22.2% | novel vs buffer=100.0% | buffer n=2738 distinct=85.0% dup=15.0%
+[diag it 1] buffer pi entropy=3.50 bits | one-hot=4.4% | pi max mass=0.38
+iter   1  loss 5.0964 (pol 4.331 val 0.765)  buffer 2738 (200g)  arena 50W/50L/0D (0.50) 18ply/g  [456.4s]
+[diag it 2] plies avg=14.98 med=13 min=7 max=49 | W=132 B=68 D=0
+[diag it 2] ply hist (upper-exclusive) 8:22 9:8 10:25 11:8 12:21 13:11 14:15 15:8 16:11 17:8 18:17 19:4 20:7 24:10 30:12 40:6 65:7
+[diag it 2] mcts depth avg=2.6 max=8 | leaves/search=1154.8 | nodes/search=1170.7 | terminal hits/game=4473.9 | batch mean=24.7
+[diag it 2] mcts root width=25.0/25 | visit entropy=3.30 bits | chosen prob=0.27 | net policy entropy=4.49 bits
+[diag it 2] net root value mean=-0.06 |v|=0.41 |v|>0.9=4.8% | v*z align=0.27 | |v-z|=0.73
+[diag it 2] states/game=13150 | cross-game dup=26.9% | novel vs buffer=82.4% | buffer n=5734 distinct=82.7% dup=17.3%
+[diag it 2] buffer pi entropy=3.31 bits | one-hot=5.0% | pi max mass=0.42
+iter   2  loss 4.1699 (pol 3.426 val 0.743)  buffer 5734 (400g)  arena 50W/50L/0D (0.50) 9ply/g  [385.4s]
+[diag it 3] plies avg=15.22 med=12 min=7 max=57 | W=144 B=56 D=0
+[diag it 3] ply hist (upper-exclusive) 8:21 9:7 10:32 11:9 12:20 13:14 14:19 15:5 16:13 17:2 18:9 19:3 20:4 24:14 30:10 40:11 65:7
+[diag it 3] mcts depth avg=2.7 max=9 | leaves/search=1140.1 | nodes/search=1161.9 | terminal hits/game=4627.4 | batch mean=23.9
+[diag it 3] mcts root width=24.6/25 | visit entropy=3.02 bits | chosen prob=0.32 | net policy entropy=3.75 bits
+[diag it 3] net root value mean=-0.05 |v|=0.44 |v|>0.9=5.4% | v*z align=0.27 | |v-z|=0.73
+[diag it 3] states/game=12526 | cross-game dup=28.3% | novel vs buffer=79.9% | buffer n=8778 distinct=83.2% dup=16.8%
+[diag it 3] buffer pi entropy=3.00 bits | one-hot=8.3% | pi max mass=0.48
+iter   3  loss 3.6667 (pol 2.945 val 0.722)  buffer 8778 (600g)  arena 50W/50L/0D (0.50) 30ply/g  [635.3s]
+[diag it 4] plies avg=14.63 med=12 min=7 max=51 | W=139 B=61 D=0
+[diag it 4] ply hist (upper-exclusive) 8:26 9:7 10:24 11:10 12:25 13:12 14:18 15:9 16:17 17:5 18:7 19:4 20:3 24:9 30:6 40:13 65:5
+[diag it 4] mcts depth avg=2.8 max=12 | leaves/search=1081.5 | nodes/search=1120.3 | terminal hits/game=4913.2 | batch mean=23.2
+[diag it 4] mcts root width=24.5/25 | visit entropy=3.14 bits | chosen prob=0.29 | net policy entropy=3.64 bits
+[diag it 4] net root value mean=0.13 |v|=0.49 |v|>0.9=10.6% | v*z align=0.37 | |v-z|=0.63
+[diag it 4] states/game=12106 | cross-game dup=28.0% | novel vs buffer=78.4% | buffer n=11705 distinct=82.7% dup=17.3%
+[diag it 4] buffer pi entropy=3.03 bits | one-hot=6.5% | pi max mass=0.47
+iter   4  loss 3.4217 (pol 2.746 val 0.675)  buffer 11705 (800g)  arena 0W/100L/0D (0.00) 33ply/g  [658.1s]
+[diag it 5] plies avg=15.26 med=12 min=7 max=55 | W=132 B=68 D=0
+[diag it 5] ply hist (upper-exclusive) 8:23 9:10 10:26 11:10 12:19 13:14 14:16 15:6 16:11 17:4 18:12 19:3 20:3 24:16 30:7 40:16 65:4
+[diag it 5] mcts depth avg=2.9 max=13 | leaves/search=1088.2 | nodes/search=1120.8 | terminal hits/game=4962.4 | batch mean=23.1
+[diag it 5] mcts root width=24.5/25 | visit entropy=3.03 bits | chosen prob=0.31 | net policy entropy=3.61 bits
+[diag it 5] net root value mean=0.13 |v|=0.53 |v|>0.9=12.5% | v*z align=0.33 | |v-z|=0.67
+[diag it 5] states/game=12406 | cross-game dup=28.0% | novel vs buffer=76.8% | buffer n=14757 distinct=83.2% dup=16.8%
+[diag it 5] buffer pi entropy=3.03 bits | one-hot=7.6% | pi max mass=0.46
+iter   5  loss 3.2720 (pol 2.613 val 0.659)  buffer 14757 (1000g)  arena 0W/100L/0D (0.00) 37ply/g  [760.2s]
+[diag it 6] plies avg=13.78 med=12 min=7 max=39 | W=132 B=68 D=0
+[diag it 6] ply hist (upper-exclusive) 8:31 9:10 10:19 11:13 12:22 13:15 14:18 15:6 16:12 17:8 18:7 19:3 20:3 24:8 30:17 40:8
+[diag it 6] mcts depth avg=2.8 max=11 | leaves/search=1093.5 | nodes/search=1121.7 | terminal hits/game=4659.4 | batch mean=23.2
+[diag it 6] mcts root width=24.5/25 | visit entropy=3.10 bits | chosen prob=0.30 | net policy entropy=3.61 bits
+[diag it 6] net root value mean=0.04 |v|=0.52 |v|>0.9=10.2% | v*z align=0.39 | |v-z|=0.61
+[diag it 6] states/game=11373 | cross-game dup=30.8% | novel vs buffer=73.4% | buffer n=17513 distinct=82.4% dup=17.6%
+[diag it 6] buffer pi entropy=3.01 bits | one-hot=6.5% | pi max mass=0.47
+iter   6  loss 3.1784 (pol 2.546 val 0.633)  buffer 17513 (1200g)  arena 50W/50L/0D (0.50) 33ply/g  [627.3s]
+[diag it 7] plies avg=13.80 med=11 min=7 max=45 | W=131 B=69 D=0
+[diag it 7] ply hist (upper-exclusive) 8:26 9:17 10:27 11:12 12:19 13:11 14:18 15:6 16:12 17:6 18:6 19:4 20:6 24:8 30:10 40:11 65:1
+[diag it 7] mcts depth avg=2.7 max=9 | leaves/search=1075.0 | nodes/search=1096.4 | terminal hits/game=4879.7 | batch mean=23.1
+[diag it 7] mcts root width=24.5/25 | visit entropy=3.12 bits | chosen prob=0.29 | net policy entropy=3.65 bits
+[diag it 7] net root value mean=-0.01 |v|=0.51 |v|>0.9=11.7% | v*z align=0.36 | |v-z|=0.64
+[diag it 7] states/game=11345 | cross-game dup=31.0% | novel vs buffer=72.9% | buffer n=20274 distinct=82.1% dup=17.9%
+[diag it 7] buffer pi entropy=2.98 bits | one-hot=7.5% | pi max mass=0.47
+iter   7  loss 3.1314 (pol 2.506 val 0.625)  buffer 20274 (1400g)  arena 69W/31L/0D (0.69) 19ply/g  BEST [478.9s]
+[diag it 8] plies avg=14.83 med=13 min=7 max=44 | W=132 B=68 D=0
+[diag it 8] ply hist (upper-exclusive) 8:21 9:7 10:29 11:9 12:18 13:15 14:19 15:8 16:16 17:8 18:4 19:2 20:4 24:10 30:15 40:13 65:2
+[diag it 8] mcts depth avg=2.8 max=11 | leaves/search=1099.8 | nodes/search=1113.5 | terminal hits/game=5021.3 | batch mean=23.3
+[diag it 8] mcts root width=24.5/25 | visit entropy=3.04 bits | chosen prob=0.30 | net policy entropy=3.57 bits
+[diag it 8] net root value mean=0.01 |v|=0.59 |v|>0.9=18.1% | v*z align=0.41 | |v-z|=0.59
+[diag it 8] states/game=12016 | cross-game dup=30.2% | novel vs buffer=72.3% | buffer n=23240 distinct=82.0% dup=18.0%
+[diag it 8] buffer pi entropy=2.99 bits | one-hot=6.2% | pi max mass=0.47
+iter   8  loss 3.0946 (pol 2.467 val 0.627)  buffer 23240 (1600g)  arena 78W/22L/0D (0.78) 28ply/g  BEST [594.0s]
+[diag it 9] plies avg=14.63 med=12 min=7 max=47 | W=148 B=52 D=0
+[diag it 9] ply hist (upper-exclusive) 8:33 9:9 10:20 11:6 12:24 13:11 14:22 15:4 16:13 17:8 18:9 19:3 20:7 24:7 30:3 40:15 65:6
+[diag it 9] mcts depth avg=2.8 max=13 | leaves/search=1057.0 | nodes/search=1082.6 | terminal hits/game=5333.0 | batch mean=23.1
+[diag it 9] mcts root width=24.4/25 | visit entropy=3.05 bits | chosen prob=0.31 | net policy entropy=3.45 bits
+[diag it 9] net root value mean=0.13 |v|=0.57 |v|>0.9=22.3% | v*z align=0.44 | |v-z|=0.56
+[diag it 9] states/game=11611 | cross-game dup=30.0% | novel vs buffer=73.4% | buffer n=26166 distinct=81.2% dup=18.8%
+[diag it 9] buffer pi entropy=2.98 bits | one-hot=6.9% | pi max mass=0.48
+iter   9  loss 3.0513 (pol 2.439 val 0.613)  buffer 26166 (1800g)  arena 50W/50L/0D (0.50) 29ply/g  [602.1s]
+[diag it 10] plies avg=14.78 med=13 min=7 max=40 | W=141 B=59 D=0
+[diag it 10] ply hist (upper-exclusive) 8:22 9:6 10:19 11:10 12:26 13:16 14:19 15:4 16:16 17:4 18:12 19:2 20:8 24:8 30:15 40:12 65:1
+[diag it 10] mcts depth avg=2.8 max=12 | leaves/search=1076.0 | nodes/search=1109.1 | terminal hits/game=5069.6 | batch mean=23.2
+[diag it 10] mcts root width=24.5/25 | visit entropy=3.09 bits | chosen prob=0.29 | net policy entropy=3.47 bits
+[diag it 10] net root value mean=0.11 |v|=0.55 |v|>0.9=16.5% | v*z align=0.38 | |v-z|=0.62
+[diag it 10] states/game=12260 | cross-game dup=28.0% | novel vs buffer=74.5% | buffer n=29121 distinct=83.2% dup=16.8%
+[diag it 10] buffer pi entropy=2.90 bits | one-hot=6.5% | pi max mass=0.48
+iter  10  loss 3.0290 (pol 2.421 val 0.608)  buffer 29121 (2000g)  arena 11W/89L/0D (0.11) 27ply/g  [610.1s]
+[diag it 11] plies avg=13.75 med=12 min=7 max=35 | W=142 B=58 D=0
+[diag it 11] ply hist (upper-exclusive) 8:22 9:7 10:27 11:10 12:32 13:7 14:17 15:5 16:16 17:10 18:8 19:3 20:6 24:12 30:11 40:7
+[diag it 11] mcts depth avg=2.8 max=11 | leaves/search=1058.3 | nodes/search=1072.9 | terminal hits/game=5343.1 | batch mean=22.9
+[diag it 11] mcts root width=24.5/25 | visit entropy=3.05 bits | chosen prob=0.30 | net policy entropy=3.53 bits
+[diag it 11] net root value mean=0.03 |v|=0.58 |v|>0.9=18.8% | v*z align=0.43 | |v-z|=0.57
+[diag it 11] states/game=10871 | cross-game dup=32.9% | novel vs buffer=68.9% | buffer n=31871 distinct=83.0% dup=17.0%
+[diag it 11] buffer pi entropy=2.99 bits | one-hot=5.9% | pi max mass=0.46
+iter  11  loss 3.0038 (pol 2.409 val 0.595)  buffer 31871 (2200g)  arena 50W/50L/0D (0.50) 23ply/g  [516.4s]
+[diag it 12] plies avg=15.65 med=13 min=7 max=52 | W=137 B=63 D=0
+[diag it 12] ply hist (upper-exclusive) 8:16 9:13 10:29 11:7 12:22 13:12 14:18 15:7 16:10 17:5 18:6 19:5 20:6 24:11 30:13 40:14 65:6
+[diag it 12] mcts depth avg=2.9 max=12 | leaves/search=1082.5 | nodes/search=1106.4 | terminal hits/game=5350.8 | batch mean=23.3
+[diag it 12] mcts root width=24.5/25 | visit entropy=3.01 bits | chosen prob=0.32 | net policy entropy=3.46 bits
+[diag it 12] net root value mean=0.07 |v|=0.60 |v|>0.9=19.9% | v*z align=0.40 | |v-z|=0.60
+[diag it 12] states/game=12433 | cross-game dup=28.4% | novel vs buffer=73.7% | buffer n=35002 distinct=81.4% dup=18.6%
+[diag it 12] buffer pi entropy=3.00 bits | one-hot=5.9% | pi max mass=0.47
+iter  12  loss 2.9830 (pol 2.392 val 0.590)  buffer 35002 (2400g)  arena 7W/93L/0D (0.07) 20ply/g  [540.1s]
+[diag it 13] plies avg=13.20 med=11 min=7 max=40 | W=149 B=51 D=0
+[diag it 13] ply hist (upper-exclusive) 8:22 9:8 10:28 11:11 12:38 13:11 14:21 15:4 16:20 17:1 18:9 19:5 20:3 24:4 30:5 40:9 65:1
+[diag it 13] mcts depth avg=2.7 max=11 | leaves/search=1047.2 | nodes/search=1065.8 | terminal hits/game=5186.7 | batch mean=23.1
+[diag it 13] mcts root width=24.4/25 | visit entropy=3.06 bits | chosen prob=0.30 | net policy entropy=3.40 bits
+[diag it 13] net root value mean=0.05 |v|=0.57 |v|>0.9=18.5% | v*z align=0.44 | |v-z|=0.56
+[diag it 13] states/game=10434 | cross-game dup=34.4% | novel vs buffer=67.0% | buffer n=37641 distinct=81.2% dup=18.8%
+[diag it 13] buffer pi entropy=2.96 bits | one-hot=6.0% | pi max mass=0.47
+iter  13  loss 2.9667 (pol 2.380 val 0.586)  buffer 37641 (2600g)  arena 0W/100L/0D (0.00) 26ply/g  [537.4s]
+[diag it 14] plies avg=12.75 med=11 min=7 max=33 | W=152 B=48 D=0
+[diag it 14] ply hist (upper-exclusive) 8:28 9:8 10:32 11:10 12:26 13:9 14:22 15:8 16:16 17:5 18:8 19:3 20:6 24:7 30:9 40:3
+[diag it 14] mcts depth avg=2.7 max=9 | leaves/search=1058.3 | nodes/search=1069.7 | terminal hits/game=5142.9 | batch mean=23.2
+[diag it 14] mcts root width=24.4/25 | visit entropy=3.11 bits | chosen prob=0.28 | net policy entropy=3.52 bits
+[diag it 14] net root value mean=0.01 |v|=0.62 |v|>0.9=23.3% | v*z align=0.50 | |v-z|=0.50
+[diag it 14] states/game=10074 | cross-game dup=35.2% | novel vs buffer=66.4% | buffer n=40191 distinct=81.1% dup=18.9%
+[diag it 14] buffer pi entropy=3.02 bits | one-hot=5.6% | pi max mass=0.46
+iter  14  loss 2.9408 (pol 2.369 val 0.572)  buffer 40191 (2800g)  arena 40W/60L/0D (0.40) 29ply/g  [595.0s]
+[diag it 15] plies avg=14.12 med=12 min=7 max=54 | W=131 B=69 D=0
+[diag it 15] ply hist (upper-exclusive) 8:28 9:10 10:17 11:11 12:29 13:12 14:11 15:10 16:15 17:5 18:7 19:6 20:7 24:9 30:18 40:3 65:2
+[diag it 15] mcts depth avg=2.8 max=11 | leaves/search=1055.6 | nodes/search=1071.5 | terminal hits/game=5335.7 | batch mean=23.3
+[diag it 15] mcts root width=24.5/25 | visit entropy=3.11 bits | chosen prob=0.29 | net policy entropy=3.47 bits
+[diag it 15] net root value mean=0.02 |v|=0.60 |v|>0.9=18.6% | v*z align=0.43 | |v-z|=0.57
+[diag it 15] states/game=11462 | cross-game dup=31.5% | novel vs buffer=69.1% | buffer n=43014 distinct=81.6% dup=18.4%
+[diag it 15] buffer pi entropy=2.91 bits | one-hot=6.7% | pi max mass=0.48
+iter  15  loss 2.9343 (pol 2.366 val 0.568)  buffer 43014 (3000g)  arena 0W/100L/0D (0.00) 15ply/g  [439.2s]
+[diag it 16] plies avg=14.63 med=13 min=7 max=45 | W=133 B=67 D=0
+[diag it 16] ply hist (upper-exclusive) 8:20 9:8 10:19 11:7 12:24 13:12 14:25 15:11 16:9 17:7 18:8 19:7 20:8 24:11 30:14 40:9 65:1
+[diag it 16] mcts depth avg=2.8 max=10 | leaves/search=1083.7 | nodes/search=1105.9 | terminal hits/game=5258.1 | batch mean=23.1
+[diag it 16] mcts root width=24.6/25 | visit entropy=3.06 bits | chosen prob=0.30 | net policy entropy=3.45 bits
+[diag it 16] net root value mean=0.01 |v|=0.57 |v|>0.9=19.2% | v*z align=0.41 | |v-z|=0.59
+[diag it 16] states/game=11859 | cross-game dup=29.6% | novel vs buffer=70.7% | buffer n=45941 distinct=80.9% dup=19.1%
+[diag it 16] buffer pi entropy=2.94 bits | one-hot=5.7% | pi max mass=0.48
+iter  16  loss 2.9154 (pol 2.356 val 0.560)  buffer 45941 (3200g)  arena 0W/100L/0D (0.00) 19ply/g  [505.2s]
+[diag it 17] plies avg=15.24 med=13 min=7 max=51 | W=146 B=54 D=0
+[diag it 17] ply hist (upper-exclusive) 8:17 9:6 10:23 11:7 12:26 13:8 14:22 15:10 16:22 17:2 18:9 19:3 20:4 24:15 30:8 40:14 65:4
+[diag it 17] mcts depth avg=2.9 max=10 | leaves/search=1073.1 | nodes/search=1093.2 | terminal hits/game=5461.4 | batch mean=23.2
+[diag it 17] mcts root width=24.4/25 | visit entropy=2.99 bits | chosen prob=0.32 | net policy entropy=3.36 bits
+[diag it 17] net root value mean=0.05 |v|=0.59 |v|>0.9=20.3% | v*z align=0.45 | |v-z|=0.55
+[diag it 17] states/game=12005 | cross-game dup=29.2% | novel vs buffer=72.5% | buffer n=48989 distinct=81.4% dup=18.6%
+[diag it 17] buffer pi entropy=2.92 bits | one-hot=6.2% | pi max mass=0.48
+iter  17  loss 2.9072 (pol 2.348 val 0.559)  buffer 48989 (3400g)  arena 10W/90L/0D (0.10) 24ply/g  [559.0s]
+[diag it 18] plies avg=14.64 med=13 min=7 max=39 | W=133 B=67 D=0
+[diag it 18] ply hist (upper-exclusive) 8:21 9:8 10:24 11:6 12:19 13:10 14:20 15:14 16:13 17:4 18:10 19:11 20:11 24:7 30:9 40:13
+[diag it 18] mcts depth avg=2.8 max=12 | leaves/search=1079.1 | nodes/search=1098.0 | terminal hits/game=5251.0 | batch mean=23.4
+[diag it 18] mcts root width=24.5/25 | visit entropy=3.06 bits | chosen prob=0.30 | net policy entropy=3.46 bits
+[diag it 18] net root value mean=0.02 |v|=0.58 |v|>0.9=20.4% | v*z align=0.42 | |v-z|=0.58
+[diag it 18] states/game=11787 | cross-game dup=29.5% | novel vs buffer=71.1% | buffer n=51918 distinct=81.0% dup=19.0%
+[diag it 18] buffer pi entropy=2.95 bits | one-hot=6.3% | pi max mass=0.47
+iter  18  loss 2.8873 (pol 2.339 val 0.549)  buffer 51918 (3600g)  arena 50W/50L/0D (0.50) 22ply/g  [536.1s]
+[diag it 19] plies avg=14.65 med=12 min=7 max=43 | W=143 B=57 D=0
+[diag it 19] ply hist (upper-exclusive) 8:27 9:7 10:25 11:8 12:25 13:12 14:15 15:7 16:11 17:6 18:8 19:3 20:6 24:10 30:16 40:13 65:1
+[diag it 19] mcts depth avg=2.8 max=10 | leaves/search=1082.0 | nodes/search=1088.0 | terminal hits/game=5315.1 | batch mean=23.4
+[diag it 19] mcts root width=24.4/25 | visit entropy=2.93 bits | chosen prob=0.32 | net policy entropy=3.31 bits
+[diag it 19] net root value mean=-0.07 |v|=0.59 |v|>0.9=21.3% | v*z align=0.43 | |v-z|=0.57
+[diag it 19] states/game=11514 | cross-game dup=30.1% | novel vs buffer=69.1% | buffer n=54849 distinct=80.9% dup=19.1%
+[diag it 19] buffer pi entropy=2.89 bits | one-hot=6.4% | pi max mass=0.48
+iter  19  loss 2.8732 (pol 2.330 val 0.544)  buffer 54849 (3800g)  arena 5W/95L/0D (0.05) 18ply/g  [504.1s]
+[diag it 20] plies avg=14.41 med=12 min=7 max=48 | W=140 B=60 D=0
+[diag it 20] ply hist (upper-exclusive) 8:27 9:9 10:28 11:10 12:21 13:6 14:18 15:9 16:12 17:5 18:8 19:2 20:8 24:12 30:13 40:10 65:2
+[diag it 20] mcts depth avg=2.7 max=10 | leaves/search=1061.3 | nodes/search=1079.6 | terminal hits/game=5409.9 | batch mean=23.2
+[diag it 20] mcts root width=24.4/25 | visit entropy=3.07 bits | chosen prob=0.30 | net policy entropy=3.43 bits
+[diag it 20] net root value mean=0.00 |v|=0.59 |v|>0.9=21.3% | v*z align=0.41 | |v-z|=0.59
+[diag it 20] states/game=11576 | cross-game dup=29.8% | novel vs buffer=70.2% | buffer n=57731 distinct=81.1% dup=18.9%
+[diag it 20] buffer pi entropy=2.85 bits | one-hot=7.2% | pi max mass=0.49
+iter  20  loss 2.8748 (pol 2.323 val 0.552)  buffer 57731 (4000g)  arena 50W/50L/0D (0.50) 21ply/g  [506.9s]
+[diag it 21] plies avg=14.69 med=13 min=7 max=41 | W=141 B=59 D=0
+[diag it 21] ply hist (upper-exclusive) 8:20 9:3 10:22 11:7 12:29 13:9 14:18 15:8 16:18 17:5 18:17 19:8 20:4 24:11 30:10 40:10 65:1
+[diag it 21] mcts depth avg=2.8 max=12 | leaves/search=1063.0 | nodes/search=1077.8 | terminal hits/game=5641.8 | batch mean=23.1
+[diag it 21] mcts root width=24.5/25 | visit entropy=3.03 bits | chosen prob=0.31 | net policy entropy=3.35 bits
+[diag it 21] net root value mean=0.06 |v|=0.58 |v|>0.9=20.8% | v*z align=0.46 | |v-z|=0.54
+[diag it 21] states/game=11665 | cross-game dup=30.2% | novel vs buffer=70.0% | buffer n=57930 distinct=82.1% dup=17.9%
+[diag it 21] buffer pi entropy=2.83 bits | one-hot=6.7% | pi max mass=0.50
+iter  21  loss 2.8282 (pol 2.295 val 0.533)  buffer 57930 (4000g)  arena 74W/26L/0D (0.74) 37ply/g  BEST [719.9s]
+[diag it 22] plies avg=15.19 med=13 min=7 max=43 | W=143 B=57 D=0
+[diag it 22] ply hist (upper-exclusive) 8:25 9:6 10:25 11:5 12:18 13:14 14:18 15:5 16:19 17:6 18:7 19:2 20:8 24:10 30:15 40:13 65:4
+[diag it 22] mcts depth avg=2.8 max=10 | leaves/search=1094.9 | nodes/search=1102.6 | terminal hits/game=5260.4 | batch mean=23.3
+[diag it 22] mcts root width=24.5/25 | visit entropy=2.97 bits | chosen prob=0.33 | net policy entropy=3.35 bits
+[diag it 22] net root value mean=-0.08 |v|=0.56 |v|>0.9=19.6% | v*z align=0.41 | |v-z|=0.59
+[diag it 22] states/game=11977 | cross-game dup=29.6% | novel vs buffer=68.2% | buffer n=57971 distinct=80.7% dup=19.4%
+[diag it 22] buffer pi entropy=2.96 bits | one-hot=6.4% | pi max mass=0.47
+iter  22  loss 2.8049 (pol 2.276 val 0.529)  buffer 57971 (4000g)  arena 19W/81L/0D (0.19) 17ply/g  [486.3s]
+[diag it 23] plies avg=14.83 med=12 min=7 max=42 | W=138 B=62 D=0
+[diag it 23] ply hist (upper-exclusive) 8:20 9:3 10:27 11:15 12:30 13:6 14:18 15:7 16:12 17:4 18:7 19:6 20:5 24:13 30:13 40:11 65:3
+[diag it 23] mcts depth avg=2.9 max=12 | leaves/search=1067.5 | nodes/search=1081.7 | terminal hits/game=5440.8 | batch mean=23.4
+[diag it 23] mcts root width=24.4/25 | visit entropy=2.94 bits | chosen prob=0.32 | net policy entropy=3.27 bits
+[diag it 23] net root value mean=0.04 |v|=0.63 |v|>0.9=24.4% | v*z align=0.48 | |v-z|=0.52
+[diag it 23] states/game=11620 | cross-game dup=30.0% | novel vs buffer=67.6% | buffer n=57893 distinct=81.2% dup=18.8%
+[diag it 23] buffer pi entropy=2.92 bits | one-hot=5.2% | pi max mass=0.47
+iter  23  loss 2.7977 (pol 2.277 val 0.521)  buffer 57893 (4000g)  arena 29W/71L/0D (0.29) 19ply/g  [509.4s]
+[diag it 24] plies avg=15.15 med=13 min=7 max=60 | W=152 B=48 D=0
+[diag it 24] ply hist (upper-exclusive) 8:18 9:7 10:27 11:5 12:25 13:6 14:13 15:10 16:22 17:4 18:15 19:3 20:7 24:12 30:15 40:9 65:2
+[diag it 24] mcts depth avg=2.9 max=13 | leaves/search=1050.5 | nodes/search=1071.9 | terminal hits/game=5789.1 | batch mean=23.3
+[diag it 24] mcts root width=24.4/25 | visit entropy=2.97 bits | chosen prob=0.32 | net policy entropy=3.26 bits
+[diag it 24] net root value mean=0.12 |v|=0.64 |v|>0.9=30.9% | v*z align=0.50 | |v-z|=0.50
+[diag it 24] states/game=11555 | cross-game dup=29.7% | novel vs buffer=69.3% | buffer n=57996 distinct=81.6% dup=18.4%
+[diag it 24] buffer pi entropy=2.89 bits | one-hot=6.2% | pi max mass=0.48
+iter  24  loss 2.7768 (pol 2.261 val 0.516)  buffer 57996 (4000g)  arena 62W/38L/0D (0.62) 31ply/g  BEST [648.6s]
+[diag it 25] plies avg=14.66 med=13 min=7 max=47 | W=142 B=58 D=0
+[diag it 25] ply hist (upper-exclusive) 8:21 9:6 10:27 11:8 12:23 13:9 14:13 15:11 16:15 17:5 18:6 19:10 20:13 24:12 30:13 40:5 65:3
+[diag it 25] mcts depth avg=2.9 max=14 | leaves/search=1039.6 | nodes/search=1057.2 | terminal hits/game=5970.1 | batch mean=23.1
+[diag it 25] mcts root width=24.4/25 | visit entropy=2.95 bits | chosen prob=0.32 | net policy entropy=3.21 bits
+[diag it 25] net root value mean=0.12 |v|=0.64 |v|>0.9=30.6% | v*z align=0.47 | |v-z|=0.53
+[diag it 25] states/game=11044 | cross-game dup=31.3% | novel vs buffer=67.7% | buffer n=57876 distinct=82.0% dup=18.1%
+[diag it 25] buffer pi entropy=2.92 bits | one-hot=6.3% | pi max mass=0.48
+iter  25  loss 2.7736 (pol 2.261 val 0.512)  buffer 57876 (4000g)  arena 37W/63L/0D (0.37) 30ply/g  [645.0s]
+[diag it 26] plies avg=15.80 med=13 min=7 max=43 | W=146 B=54 D=0
+[diag it 26] ply hist (upper-exclusive) 8:22 9:4 10:22 11:3 12:25 13:7 14:19 15:6 16:14 17:11 18:12 19:1 20:5 24:16 30:16 40:15 65:2
+[diag it 26] mcts depth avg=2.8 max=10 | leaves/search=1089.7 | nodes/search=1095.3 | terminal hits/game=5544.8 | batch mean=23.4
+[diag it 26] mcts root width=24.4/25 | visit entropy=2.97 bits | chosen prob=0.32 | net policy entropy=3.30 bits
+[diag it 26] net root value mean=-0.06 |v|=0.63 |v|>0.9=27.4% | v*z align=0.48 | |v-z|=0.52
+[diag it 26] states/game=12347 | cross-game dup=27.9% | novel vs buffer=68.7% | buffer n=58280 distinct=81.0% dup=18.9%
+[diag it 26] buffer pi entropy=2.87 bits | one-hot=5.5% | pi max mass=0.49
+iter  26  loss 2.7556 (pol 2.254 val 0.502)  buffer 58280 (4000g)  arena 40W/60L/0D (0.40) 20ply/g  [522.2s]
+[diag it 27] plies avg=14.82 med=13 min=7 max=38 | W=143 B=57 D=0
+[diag it 27] ply hist (upper-exclusive) 8:18 9:6 10:25 11:9 12:30 13:11 14:14 15:8 16:15 17:4 18:11 19:2 20:3 24:20 30:8 40:16
+[diag it 27] mcts depth avg=2.9 max=11 | leaves/search=1069.6 | nodes/search=1087.8 | terminal hits/game=5571.1 | batch mean=23.1
+[diag it 27] mcts root width=24.5/25 | visit entropy=2.96 bits | chosen prob=0.32 | net policy entropy=3.28 bits
+[diag it 27] net root value mean=0.11 |v|=0.62 |v|>0.9=26.2% | v*z align=0.45 | |v-z|=0.55
+[diag it 27] states/game=11499 | cross-game dup=30.2% | novel vs buffer=67.5% | buffer n=58484 distinct=80.8% dup=19.2%
+[diag it 27] buffer pi entropy=2.85 bits | one-hot=6.2% | pi max mass=0.49
+iter  27  loss 2.7537 (pol 2.250 val 0.503)  buffer 58484 (4000g)  arena 82W/18L/0D (0.82) 25ply/g  BEST [563.2s]
+[diag it 28] plies avg=17.18 med=15 min=7 max=51 | W=143 B=57 D=0
+[diag it 28] ply hist (upper-exclusive) 8:16 9:5 10:21 11:7 12:16 13:9 14:18 15:6 16:23 17:4 18:11 19:4 20:8 24:13 30:13 40:19 65:7
+[diag it 28] mcts depth avg=3.0 max=11 | leaves/search=1082.2 | nodes/search=1090.5 | terminal hits/game=5996.9 | batch mean=23.5
+[diag it 28] mcts root width=24.4/25 | visit entropy=2.87 bits | chosen prob=0.34 | net policy entropy=3.23 bits
+[diag it 28] net root value mean=0.05 |v|=0.64 |v|>0.9=30.5% | v*z align=0.45 | |v-z|=0.55
+[diag it 28] states/game=13026 | cross-game dup=27.4% | novel vs buffer=70.9% | buffer n=58953 distinct=81.8% dup=18.2%
+[diag it 28] buffer pi entropy=2.88 bits | one-hot=6.1% | pi max mass=0.48
+iter  28  loss 2.7485 (pol 2.244 val 0.505)  buffer 58953 (4000g)  arena 39W/61L/0D (0.39) 18ply/g  [538.4s]
+[diag it 29] plies avg=15.01 med=13 min=7 max=50 | W=150 B=50 D=0
+[diag it 29] ply hist (upper-exclusive) 8:25 9:2 10:24 11:6 12:27 13:10 14:20 15:5 16:13 17:4 18:16 19:3 20:10 24:8 30:11 40:13 65:3
+[diag it 29] mcts depth avg=2.9 max=11 | leaves/search=1061.0 | nodes/search=1071.4 | terminal hits/game=5700.5 | batch mean=23.4
+[diag it 29] mcts root width=24.4/25 | visit entropy=2.94 bits | chosen prob=0.33 | net policy entropy=3.23 bits
+[diag it 29] net root value mean=0.02 |v|=0.66 |v|>0.9=31.9% | v*z align=0.51 | |v-z|=0.49
+[diag it 29] states/game=11241 | cross-game dup=31.2% | novel vs buffer=65.6% | buffer n=59029 distinct=81.2% dup=18.9%
+[diag it 29] buffer pi entropy=2.79 bits | one-hot=5.8% | pi max mass=0.50
+iter  29  loss 2.7427 (pol 2.239 val 0.504)  buffer 59029 (4000g)  arena 80W/20L/0D (0.80) 23ply/g  BEST [512.6s]
+[diag it 30] plies avg=15.89 med=13 min=7 max=48 | W=144 B=56 D=0
+[diag it 30] ply hist (upper-exclusive) 8:15 9:6 10:19 11:7 12:24 13:10 14:23 15:8 16:15 17:3 18:13 19:2 20:8 24:12 30:20 40:12 65:3
+[diag it 30] mcts depth avg=2.9 max=11 | leaves/search=1061.8 | nodes/search=1075.6 | terminal hits/game=5978.0 | batch mean=23.2
+[diag it 30] mcts root width=24.5/25 | visit entropy=2.99 bits | chosen prob=0.32 | net policy entropy=3.20 bits
+[diag it 30] net root value mean=0.05 |v|=0.66 |v|>0.9=32.9% | v*z align=0.52 | |v-z|=0.48
+[diag it 30] states/game=12062 | cross-game dup=29.1% | novel vs buffer=68.6% | buffer n=59252 distinct=81.0% dup=19.0%
+[diag it 30] buffer pi entropy=2.86 bits | one-hot=5.6% | pi max mass=0.48
+iter  30  loss 2.7275 (pol 2.234 val 0.494)  buffer 59252 (4000g)  arena 21W/79L/0D (0.21) 24ply/g  [606.9s]
+[diag it 31] plies avg=15.96 med=14 min=7 max=43 | W=144 B=56 D=0
+[diag it 31] ply hist (upper-exclusive) 8:21 9:2 10:21 11:11 12:19 13:4 14:16 15:11 16:14 17:9 18:12 19:4 20:11 24:14 30:16 40:9 65:6
+[diag it 31] mcts depth avg=2.9 max=11 | leaves/search=1058.6 | nodes/search=1076.1 | terminal hits/game=5965.6 | batch mean=23.2
+[diag it 31] mcts root width=24.5/25 | visit entropy=3.01 bits | chosen prob=0.32 | net policy entropy=3.23 bits
+[diag it 31] net root value mean=0.05 |v|=0.64 |v|>0.9=29.3% | v*z align=0.47 | |v-z|=0.53
+[diag it 31] states/game=12291 | cross-game dup=28.0% | novel vs buffer=70.0% | buffer n=59694 distinct=80.8% dup=19.2%
+[diag it 31] buffer pi entropy=2.83 bits | one-hot=5.7% | pi max mass=0.49
+iter  31  loss 2.7246 (pol 2.233 val 0.492)  buffer 59694 (4000g)  arena 29W/71L/0D (0.29) 29ply/g  [665.8s]
+[diag it 32] plies avg=15.32 med=13 min=7 max=45 | W=162 B=38 D=0
+[diag it 32] ply hist (upper-exclusive) 8:20 9:7 10:30 11:2 12:23 13:5 14:26 15:7 16:21 17:1 18:12 19:1 20:5 24:9 30:12 40:13 65:6
+[diag it 32] mcts depth avg=2.8 max=10 | leaves/search=1077.5 | nodes/search=1080.7 | terminal hits/game=5538.6 | batch mean=23.4
+[diag it 32] mcts root width=24.5/25 | visit entropy=2.96 bits | chosen prob=0.33 | net policy entropy=3.25 bits
+[diag it 32] net root value mean=-0.03 |v|=0.68 |v|>0.9=33.7% | v*z align=0.55 | |v-z|=0.45
+[diag it 32] states/game=11644 | cross-game dup=30.6% | novel vs buffer=65.5% | buffer n=59627 distinct=82.0% dup=18.0%
+[diag it 32] buffer pi entropy=2.83 bits | one-hot=6.5% | pi max mass=0.49
+iter  32  loss 2.7122 (pol 2.230 val 0.483)  buffer 59627 (4000g)  arena 100W/0L/0D (1.00) 36ply/g  BEST [737.5s]
+[diag it 33] plies avg=16.02 med=14 min=7 max=51 | W=154 B=46 D=0
+[diag it 33] ply hist (upper-exclusive) 8:14 9:7 10:17 11:5 12:28 13:5 14:22 15:7 16:19 17:4 18:6 19:2 20:15 24:20 30:15 40:10 65:4
+[diag it 33] mcts depth avg=2.9 max=11 | leaves/search=1055.5 | nodes/search=1061.8 | terminal hits/game=6399.5 | batch mean=23.2
+[diag it 33] mcts root width=24.5/25 | visit entropy=3.01 bits | chosen prob=0.32 | net policy entropy=3.23 bits
+[diag it 33] net root value mean=0.04 |v|=0.67 |v|>0.9=33.7% | v*z align=0.52 | |v-z|=0.48
+[diag it 33] states/game=11960 | cross-game dup=28.7% | novel vs buffer=68.6% | buffer n=60192 distinct=81.3% dup=18.7%
+[diag it 33] buffer pi entropy=2.83 bits | one-hot=5.9% | pi max mass=0.49
+iter  33  loss 2.7042 (pol 2.227 val 0.477)  buffer 60192 (4000g)  arena 64W/36L/0D (0.64) 32ply/g  BEST [676.6s]
+[diag it 34] plies avg=16.36 med=13 min=7 max=54 | W=141 B=59 D=0
+[diag it 34] ply hist (upper-exclusive) 8:19 9:6 10:13 11:9 12:17 13:6 14:31 15:10 16:11 17:3 18:9 19:6 20:7 24:14 30:22 40:15 65:2
+[diag it 34] mcts depth avg=2.9 max=11 | leaves/search=1074.2 | nodes/search=1088.4 | terminal hits/game=5854.5 | batch mean=23.3
+[diag it 34] mcts root width=24.5/25 | visit entropy=2.91 bits | chosen prob=0.33 | net policy entropy=3.16 bits
+[diag it 34] net root value mean=0.03 |v|=0.63 |v|>0.9=28.5% | v*z align=0.46 | |v-z|=0.54
+[diag it 34] states/game=12499 | cross-game dup=27.5% | novel vs buffer=70.4% | buffer n=60915 distinct=81.6% dup=18.4%
+[diag it 34] buffer pi entropy=2.81 bits | one-hot=6.9% | pi max mass=0.49
+iter  34  loss 2.6915 (pol 2.217 val 0.475)  buffer 60915 (4000g)  arena 50W/50L/0D (0.50) 36ply/g  [720.3s]
+[diag it 35] plies avg=15.64 med=13 min=7 max=56 | W=153 B=47 D=0
+[diag it 35] ply hist (upper-exclusive) 8:13 9:3 10:25 11:4 12:25 13:4 14:27 15:10 16:14 17:3 18:16 19:5 20:9 24:16 30:13 40:11 65:2
+[diag it 35] mcts depth avg=2.9 max=12 | leaves/search=1051.0 | nodes/search=1058.5 | terminal hits/game=6367.1 | batch mean=23.3
+[diag it 35] mcts root width=24.4/25 | visit entropy=2.99 bits | chosen prob=0.32 | net policy entropy=3.20 bits
+[diag it 35] net root value mean=0.03 |v|=0.66 |v|>0.9=34.6% | v*z align=0.51 | |v-z|=0.49
+[diag it 35] states/game=11687 | cross-game dup=29.6% | novel vs buffer=67.8% | buffer n=61221 distinct=81.6% dup=18.4%
+[diag it 35] buffer pi entropy=2.77 bits | one-hot=7.1% | pi max mass=0.50
+iter  35  loss 2.6730 (pol 2.209 val 0.464)  buffer 61221 (4000g)  arena 0W/100L/0D (0.00) 44ply/g  [804.5s]
+[diag it 36] plies avg=16.30 med=13 min=7 max=41 | W=145 B=55 D=0
+[diag it 36] ply hist (upper-exclusive) 8:15 9:4 10:16 11:7 12:25 13:12 14:22 15:6 16:17 17:5 18:12 19:5 20:11 24:4 30:20 40:17 65:2
+[diag it 36] mcts depth avg=2.9 max=11 | leaves/search=1100.5 | nodes/search=1107.8 | terminal hits/game=5515.0 | batch mean=23.5
+[diag it 36] mcts root width=24.5/25 | visit entropy=2.94 bits | chosen prob=0.34 | net policy entropy=3.24 bits
+[diag it 36] net root value mean=-0.02 |v|=0.68 |v|>0.9=30.7% | v*z align=0.47 | |v-z|=0.53
+[diag it 36] states/game=12533 | cross-game dup=28.2% | novel vs buffer=67.4% | buffer n=61553 distinct=80.8% dup=19.2%
+[diag it 36] buffer pi entropy=2.82 bits | one-hot=6.2% | pi max mass=0.49
+iter  36  loss 2.6738 (pol 2.207 val 0.467)  buffer 61553 (4000g)  arena 75W/25L/0D (0.75) 25ply/g  BEST [609.5s]
+[diag it 37] plies avg=16.34 med=14 min=7 max=55 | W=151 B=49 D=0
+[diag it 37] ply hist (upper-exclusive) 8:21 9:6 10:21 11:10 12:19 13:7 14:12 15:4 16:21 18:14 19:3 20:15 24:12 30:15 40:16 65:4
+[diag it 37] mcts depth avg=2.9 max=12 | leaves/search=1066.7 | nodes/search=1072.3 | terminal hits/game=6129.9 | batch mean=23.3
+[diag it 37] mcts root width=24.5/25 | visit entropy=2.91 bits | chosen prob=0.34 | net policy entropy=3.17 bits
+[diag it 37] net root value mean=0.04 |v|=0.67 |v|>0.9=34.5% | v*z align=0.51 | |v-z|=0.49
+[diag it 37] states/game=12054 | cross-game dup=28.7% | novel vs buffer=68.5% | buffer n=61772 distinct=82.3% dup=17.7%
+[diag it 37] buffer pi entropy=2.81 bits | one-hot=6.5% | pi max mass=0.49
+iter  37  loss 2.6650 (pol 2.200 val 0.465)  buffer 61772 (4000g)  arena 100W/0L/0D (1.00) 29ply/g  BEST [651.3s]
+[diag it 38] plies avg=15.59 med=14 min=7 max=54 | W=138 B=62 D=0
+[diag it 38] ply hist (upper-exclusive) 8:21 9:9 10:19 11:8 12:17 13:7 14:15 15:10 16:22 17:7 18:9 19:5 20:6 24:14 30:18 40:10 65:3
+[diag it 38] mcts depth avg=2.9 max=11 | leaves/search=1070.1 | nodes/search=1078.8 | terminal hits/game=5895.5 | batch mean=23.4
+[diag it 38] mcts root width=24.4/25 | visit entropy=2.93 bits | chosen prob=0.33 | net policy entropy=3.17 bits
+[diag it 38] net root value mean=0.03 |v|=0.67 |v|>0.9=32.9% | v*z align=0.47 | |v-z|=0.53
+[diag it 38] states/game=11646 | cross-game dup=29.7% | novel vs buffer=67.1% | buffer n=61961 distinct=82.0% dup=17.9%
+[diag it 38] buffer pi entropy=2.78 bits | one-hot=7.5% | pi max mass=0.49
+iter  38  loss 2.6573 (pol 2.197 val 0.460)  buffer 61961 (4000g)  arena 100W/0L/0D (1.00) 26ply/g  BEST [608.1s]
+[diag it 39] plies avg=16.59 med=14 min=7 max=56 | W=148 B=52 D=0
+[diag it 39] ply hist (upper-exclusive) 8:11 9:9 10:25 11:7 12:22 13:3 14:19 15:8 16:24 17:5 18:7 19:3 20:10 24:10 30:16 40:17 65:4
+[diag it 39] mcts depth avg=3.0 max=16 | leaves/search=1079.1 | nodes/search=1090.4 | terminal hits/game=5863.5 | batch mean=23.4
+[diag it 39] mcts root width=24.6/25 | visit entropy=2.89 bits | chosen prob=0.34 | net policy entropy=3.13 bits
+[diag it 39] net root value mean=0.07 |v|=0.65 |v|>0.9=30.4% | v*z align=0.49 | |v-z|=0.51
+[diag it 39] states/game=12521 | cross-game dup=27.2% | novel vs buffer=69.7% | buffer n=62348 distinct=80.9% dup=19.1%
+[diag it 39] buffer pi entropy=2.77 bits | one-hot=6.3% | pi max mass=0.50
+iter  39  loss 2.6612 (pol 2.195 val 0.466)  buffer 62348 (4000g)  arena 50W/50L/0D (0.50) 35ply/g  [752.1s]
+[diag it 40] plies avg=18.11 med=15 min=7 max=56 | W=143 B=57 D=0
+[diag it 40] ply hist (upper-exclusive) 8:13 9:4 10:20 11:1 12:20 13:3 14:19 15:13 16:10 17:8 18:6 19:4 20:13 24:19 30:21 40:18 65:8
+[diag it 40] mcts depth avg=3.0 max=12 | leaves/search=1082.8 | nodes/search=1091.3 | terminal hits/game=6439.9 | batch mean=23.4
+[diag it 40] mcts root width=24.6/25 | visit entropy=2.92 bits | chosen prob=0.33 | net policy entropy=3.13 bits
+[diag it 40] net root value mean=0.06 |v|=0.68 |v|>0.9=36.5% | v*z align=0.50 | |v-z|=0.50
+[diag it 40] states/game=13686 | cross-game dup=25.0% | novel vs buffer=72.7% | buffer n=63087 distinct=82.2% dup=17.8%
+[diag it 40] buffer pi entropy=2.76 bits | one-hot=7.4% | pi max mass=0.50
+iter  40  loss 2.6538 (pol 2.192 val 0.461)  buffer 63087 (4000g)  arena 100W/0L/0D (1.00) 30ply/g  BEST [686.4s]
+[diag it 41] plies avg=16.61 med=13 min=7 max=51 | W=147 B=53 D=0
+[diag it 41] ply hist (upper-exclusive) 8:20 9:4 10:17 11:7 12:22 13:8 14:25 15:9 16:16 17:9 18:4 19:1 20:5 24:14 30:18 40:14 65:7
+[diag it 41] mcts depth avg=3.0 max=11 | leaves/search=1059.2 | nodes/search=1067.4 | terminal hits/game=6112.8 | batch mean=23.4
+[diag it 41] mcts root width=24.5/25 | visit entropy=2.95 bits | chosen prob=0.33 | net policy entropy=3.17 bits
+[diag it 41] net root value mean=0.05 |v|=0.65 |v|>0.9=32.0% | v*z align=0.50 | |v-z|=0.50
+[diag it 41] states/game=12412 | cross-game dup=28.2% | novel vs buffer=68.6% | buffer n=63473 distinct=82.2% dup=17.8%
+[diag it 41] buffer pi entropy=2.72 bits | one-hot=7.5% | pi max mass=0.50
+iter  41  loss 2.6395 (pol 2.185 val 0.455)  buffer 63473 (4000g)  arena 83W/17L/0D (0.83) 25ply/g  BEST [616.6s]
+[diag it 42] plies avg=16.84 med=14 min=7 max=54 | W=149 B=51 D=0
+[diag it 42] ply hist (upper-exclusive) 8:14 9:3 10:21 11:4 12:30 13:7 14:18 15:6 16:14 17:4 18:8 19:4 20:11 24:17 30:17 40:17 65:5
+[diag it 42] mcts depth avg=3.0 max=13 | leaves/search=1080.4 | nodes/search=1089.3 | terminal hits/game=6143.5 | batch mean=23.4
+[diag it 42] mcts root width=24.5/25 | visit entropy=2.95 bits | chosen prob=0.33 | net policy entropy=3.16 bits
+[diag it 42] net root value mean=0.04 |v|=0.68 |v|>0.9=34.8% | v*z align=0.52 | |v-z|=0.48
+[diag it 42] states/game=12578 | cross-game dup=27.8% | novel vs buffer=68.9% | buffer n=63805 distinct=81.0% dup=18.9%
+[diag it 42] buffer pi entropy=2.79 bits | one-hot=7.6% | pi max mass=0.49
+iter  42  loss 2.6354 (pol 2.184 val 0.451)  buffer 63805 (4000g)  arena 50W/50L/0D (0.50) 35ply/g  [745.2s]
+[diag it 43] plies avg=17.64 med=15 min=7 max=51 | W=135 B=65 D=0
+[diag it 43] ply hist (upper-exclusive) 8:11 9:5 10:19 11:5 12:20 13:8 14:18 15:10 16:9 17:9 18:13 19:2 20:11 24:15 30:20 40:16 65:9
+[diag it 43] mcts depth avg=3.0 max=14 | leaves/search=1079.1 | nodes/search=1091.2 | terminal hits/game=6268.5 | batch mean=23.4
+[diag it 43] mcts root width=24.6/25 | visit entropy=2.92 bits | chosen prob=0.34 | net policy entropy=3.14 bits
+[diag it 43] net root value mean=0.09 |v|=0.65 |v|>0.9=30.5% | v*z align=0.44 | |v-z|=0.56
+[diag it 43] states/game=13312 | cross-game dup=25.9% | novel vs buffer=71.3% | buffer n=64368 distinct=81.7% dup=18.4%
+[diag it 43] buffer pi entropy=2.84 bits | one-hot=7.7% | pi max mass=0.48
+iter  43  loss 2.6409 (pol 2.182 val 0.459)  buffer 64368 (4000g)  arena 50W/50L/0D (0.50) 38ply/g  [797.7s]
+[diag it 44] plies avg=15.41 med=13 min=7 max=44 | W=144 B=56 D=0
+[diag it 44] ply hist (upper-exclusive) 8:18 9:6 10:33 11:5 12:14 13:8 14:22 15:4 16:9 17:8 18:15 19:8 20:7 24:16 30:15 40:9 65:3
+[diag it 44] mcts depth avg=2.9 max=11 | leaves/search=1062.7 | nodes/search=1064.4 | terminal hits/game=6079.4 | batch mean=23.2
+[diag it 44] mcts root width=24.6/25 | visit entropy=3.01 bits | chosen prob=0.31 | net policy entropy=3.25 bits
+[diag it 44] net root value mean=0.03 |v|=0.65 |v|>0.9=32.8% | v*z align=0.47 | |v-z|=0.53
+[diag it 44] states/game=11630 | cross-game dup=29.8% | novel vs buffer=65.2% | buffer n=64420 distinct=81.8% dup=18.2%
+[diag it 44] buffer pi entropy=2.79 bits | one-hot=6.7% | pi max mass=0.49
+iter  44  loss 2.6354 (pol 2.182 val 0.453)  buffer 64420 (4000g)  arena 50W/50L/0D (0.50) 29ply/g  [615.9s]
+[diag it 45] plies avg=15.76 med=14 min=7 max=47 | W=144 B=56 D=0
+[diag it 45] ply hist (upper-exclusive) 8:19 9:3 10:21 11:5 12:19 13:10 14:17 15:8 16:19 17:3 18:9 19:7 20:14 24:17 30:18 40:9 65:2
+[diag it 45] mcts depth avg=2.9 max=12 | leaves/search=1067.6 | nodes/search=1067.6 | terminal hits/game=6185.9 | batch mean=23.3
+[diag it 45] mcts root width=24.6/25 | visit entropy=2.97 bits | chosen prob=0.32 | net policy entropy=3.24 bits
+[diag it 45] net root value mean=-0.03 |v|=0.67 |v|>0.9=34.7% | v*z align=0.47 | |v-z|=0.53
+[diag it 45] states/game=11737 | cross-game dup=30.1% | novel vs buffer=66.7% | buffer n=64640 distinct=82.2% dup=17.8%
+[diag it 45] buffer pi entropy=2.81 bits | one-hot=8.0% | pi max mass=0.48
+iter  45  loss 2.6350 (pol 2.182 val 0.453)  buffer 64640 (4000g)  arena 50W/50L/0D (0.50) 39ply/g  [767.5s]
+[diag it 46] plies avg=17.00 med=14 min=7 max=52 | W=137 B=63 D=0
+[diag it 46] ply hist (upper-exclusive) 8:13 9:5 10:17 11:10 12:28 13:5 14:17 15:11 16:14 17:5 18:7 19:3 20:8 24:19 30:12 40:21 65:5
+[diag it 46] mcts depth avg=3.0 max=11 | leaves/search=1080.0 | nodes/search=1081.7 | terminal hits/game=6196.2 | batch mean=23.3
+[diag it 46] mcts root width=24.5/25 | visit entropy=2.89 bits | chosen prob=0.35 | net policy entropy=3.08 bits
+[diag it 46] net root value mean=0.02 |v|=0.65 |v|>0.9=32.3% | v*z align=0.45 | |v-z|=0.55
+[diag it 46] states/game=12529 | cross-game dup=28.2% | novel vs buffer=68.7% | buffer n=64881 distinct=81.3% dup=18.7%
+[diag it 46] buffer pi entropy=2.76 bits | one-hot=8.8% | pi max mass=0.49
+iter  46  loss 2.6306 (pol 2.176 val 0.455)  buffer 64881 (4000g)  arena 50W/50L/0D (0.50) 36ply/g  [755.2s]
+[diag it 47] plies avg=15.88 med=14 min=7 max=61 | W=149 B=51 D=0
+[diag it 47] ply hist (upper-exclusive) 8:11 9:4 10:15 11:8 12:28 13:14 14:19 15:1 16:26 17:6 18:8 19:2 20:14 24:16 30:15 40:11 65:2
+[diag it 47] mcts depth avg=2.9 max=12 | leaves/search=1060.9 | nodes/search=1065.1 | terminal hits/game=6267.9 | batch mean=23.3
+[diag it 47] mcts root width=24.5/25 | visit entropy=2.97 bits | chosen prob=0.32 | net policy entropy=3.13 bits
+[diag it 47] net root value mean=0.02 |v|=0.65 |v|>0.9=33.8% | v*z align=0.50 | |v-z|=0.50
+[diag it 47] states/game=11979 | cross-game dup=28.8% | novel vs buffer=67.7% | buffer n=65091 distinct=81.7% dup=18.3%
+[diag it 47] buffer pi entropy=2.83 bits | one-hot=7.8% | pi max mass=0.48
+iter  47  loss 2.6234 (pol 2.172 val 0.452)  buffer 65091 (4000g)  arena 65W/35L/0D (0.65) 31ply/g  BEST [661.7s]
+[diag it 48] plies avg=16.93 med=15 min=7 max=49 | W=137 B=63 D=0
+[diag it 48] ply hist (upper-exclusive) 8:7 9:1 10:20 11:13 12:17 13:9 14:18 15:11 16:23 17:6 18:10 19:6 20:9 24:17 30:12 40:15 65:6
+[diag it 48] mcts depth avg=3.0 max=13 | leaves/search=1067.3 | nodes/search=1072.6 | terminal hits/game=6441.2 | batch mean=23.2
+[diag it 48] mcts root width=24.6/25 | visit entropy=2.88 bits | chosen prob=0.34 | net policy entropy=3.03 bits
+[diag it 48] net root value mean=0.05 |v|=0.67 |v|>0.9=34.8% | v*z align=0.49 | |v-z|=0.51
+[diag it 48] states/game=12464 | cross-game dup=27.6% | novel vs buffer=69.3% | buffer n=65041 distinct=81.3% dup=18.6%
+[diag it 48] buffer pi entropy=2.74 bits | one-hot=9.5% | pi max mass=0.50
+iter  48  loss 2.6231 (pol 2.174 val 0.449)  buffer 65041 (4000g)  arena 50W/50L/0D (0.50) 30ply/g  [670.5s]
+[diag it 49] plies avg=17.01 med=15 min=7 max=47 | W=134 B=66 D=0
+[diag it 49] ply hist (upper-exclusive) 8:12 9:2 10:17 11:7 12:19 13:8 14:15 15:4 16:18 17:11 18:9 19:11 20:10 24:22 30:18 40:13 65:4
+[diag it 49] mcts depth avg=3.0 max=11 | leaves/search=1083.6 | nodes/search=1093.1 | terminal hits/game=6185.0 | batch mean=23.4
+[diag it 49] mcts root width=24.6/25 | visit entropy=2.87 bits | chosen prob=0.34 | net policy entropy=3.06 bits
+[diag it 49] net root value mean=0.04 |v|=0.64 |v|>0.9=30.3% | v*z align=0.42 | |v-z|=0.58
+[diag it 49] states/game=12664 | cross-game dup=27.2% | novel vs buffer=68.9% | buffer n=65441 distinct=81.3% dup=18.7%
+[diag it 49] buffer pi entropy=2.80 bits | one-hot=6.6% | pi max mass=0.49
+iter  49  loss 2.6213 (pol 2.171 val 0.451)  buffer 65441 (4000g)  arena 17W/83L/0D (0.17) 26ply/g  [639.1s]
+[diag it 50] plies avg=17.57 med=14 min=7 max=53 | W=153 B=47 D=0
+[diag it 50] ply hist (upper-exclusive) 8:5 9:2 10:20 11:4 12:34 13:6 14:20 15:9 16:16 17:6 18:16 19:2 20:10 24:7 30:15 40:18 65:10
+[diag it 50] mcts depth avg=3.1 max=12 | leaves/search=1072.7 | nodes/search=1080.0 | terminal hits/game=6474.7 | batch mean=23.4
+[diag it 50] mcts root width=24.6/25 | visit entropy=2.85 bits | chosen prob=0.34 | net policy entropy=3.05 bits
+[diag it 50] net root value mean=0.10 |v|=0.65 |v|>0.9=34.3% | v*z align=0.48 | |v-z|=0.52
+[diag it 50] states/game=12970 | cross-game dup=26.7% | novel vs buffer=69.1% | buffer n=65776 distinct=83.0% dup=17.0%
+[diag it 50] buffer pi entropy=2.75 bits | one-hot=6.8% | pi max mass=0.50
+iter  50  loss 2.6178 (pol 2.168 val 0.449)  buffer 65776 (4000g)  arena 20W/80L/0D (0.20) 29ply/g  [672.7s]
+[diag it 51] plies avg=17.22 med=15 min=7 max=55 | W=142 B=58 D=0
+[diag it 51] ply hist (upper-exclusive) 8:14 9:2 10:18 11:7 12:19 13:10 14:14 15:8 16:12 17:8 18:17 19:7 20:10 24:17 30:15 40:17 65:5
+[diag it 51] mcts depth avg=3.0 max=12 | leaves/search=1069.2 | nodes/search=1076.4 | terminal hits/game=6414.9 | batch mean=23.3
+[diag it 51] mcts root width=24.5/25 | visit entropy=2.95 bits | chosen prob=0.33 | net policy entropy=3.15 bits
+[diag it 51] net root value mean=0.03 |v|=0.65 |v|>0.9=31.3% | v*z align=0.48 | |v-z|=0.52
+[diag it 51] states/game=12809 | cross-game dup=27.5% | novel vs buffer=68.1% | buffer n=66028 distinct=81.9% dup=18.1%
+[diag it 51] buffer pi entropy=2.70 bits | one-hot=8.7% | pi max mass=0.51
+iter  51  loss 2.6048 (pol 2.156 val 0.448)  buffer 66028 (4000g)  arena 58W/42L/0D (0.58) 20ply/g  BEST [607.3s]
+[diag it 52] plies avg=18.07 med=15 min=7 max=55 | W=137 B=63 D=0
+[diag it 52] ply hist (upper-exclusive) 8:15 9:4 10:21 11:7 12:20 13:5 14:12 15:4 16:13 17:6 18:10 19:8 20:7 24:22 30:20 40:16 65:10
+[diag it 52] mcts depth avg=3.0 max=11 | leaves/search=1057.9 | nodes/search=1058.2 | terminal hits/game=6911.3 | batch mean=23.2
+[diag it 52] mcts root width=24.6/25 | visit entropy=2.95 bits | chosen prob=0.33 | net policy entropy=3.16 bits
+[diag it 52] net root value mean=0.04 |v|=0.69 |v|>0.9=37.9% | v*z align=0.48 | |v-z|=0.52
+[diag it 52] states/game=13210 | cross-game dup=26.3% | novel vs buffer=70.7% | buffer n=66579 distinct=82.4% dup=17.6%
+[diag it 52] buffer pi entropy=2.78 bits | one-hot=7.2% | pi max mass=0.49
+iter  52  loss 2.6153 (pol 2.165 val 0.450)  buffer 66579 (4000g)  arena 84W/16L/0D (0.84) 30ply/g  BEST [694.1s]
+[diag it 53] plies avg=16.45 med=14 min=7 max=48 | W=141 B=59 D=0
+[diag it 53] ply hist (upper-exclusive) 8:7 9:5 10:29 11:10 12:23 13:6 14:14 15:9 16:15 17:4 18:12 19:6 20:11 24:15 30:16 40:15 65:3
+[diag it 53] mcts depth avg=2.9 max=12 | leaves/search=1062.1 | nodes/search=1066.4 | terminal hits/game=6403.9 | batch mean=23.2
+[diag it 53] mcts root width=24.6/25 | visit entropy=3.00 bits | chosen prob=0.32 | net policy entropy=3.15 bits
+[diag it 53] net root value mean=0.04 |v|=0.67 |v|>0.9=35.9% | v*z align=0.47 | |v-z|=0.53
+[diag it 53] states/game=12330 | cross-game dup=28.2% | novel vs buffer=68.3% | buffer n=66666 distinct=83.1% dup=16.9%
+[diag it 53] buffer pi entropy=2.72 bits | one-hot=8.7% | pi max mass=0.50
+iter  53  loss 2.6153 (pol 2.161 val 0.455)  buffer 66666 (4000g)  arena 50W/50L/0D (0.50) 35ply/g  [691.7s]
+[diag it 54] plies avg=16.64 med=14 min=7 max=46 | W=148 B=52 D=0
+[diag it 54] ply hist (upper-exclusive) 8:15 9:1 10:16 11:6 12:26 13:9 14:23 15:6 16:12 17:5 18:13 19:6 20:8 24:16 30:23 40:12 65:3
+[diag it 54] mcts depth avg=2.9 max=11 | leaves/search=1069.3 | nodes/search=1066.2 | terminal hits/game=6452.7 | batch mean=23.2
+[diag it 54] mcts root width=24.6/25 | visit entropy=3.00 bits | chosen prob=0.32 | net policy entropy=3.25 bits
+[diag it 54] net root value mean=0.00 |v|=0.68 |v|>0.9=36.4% | v*z align=0.48 | |v-z|=0.52
+[diag it 54] states/game=12427 | cross-game dup=28.0% | novel vs buffer=66.2% | buffer n=66721 distinct=83.3% dup=16.7%
+[diag it 54] buffer pi entropy=2.80 bits | one-hot=8.1% | pi max mass=0.48
+iter  54  loss 2.6111 (pol 2.165 val 0.446)  buffer 66721 (4000g)  arena 50W/50L/0D (0.50) 42ply/g  [816.2s]
+[diag it 55] plies avg=18.09 med=15 min=7 max=46 | W=140 B=60 D=0
+[diag it 55] ply hist (upper-exclusive) 8:12 10:22 11:6 12:14 13:13 14:24 15:4 16:15 17:8 18:6 19:4 20:8 24:13 30:20 40:25 65:6
+[diag it 55] mcts depth avg=3.0 max=12 | leaves/search=1069.4 | nodes/search=1068.2 | terminal hits/game=6835.9 | batch mean=23.2
+[diag it 55] mcts root width=24.6/25 | visit entropy=2.91 bits | chosen prob=0.34 | net policy entropy=3.11 bits
+[diag it 55] net root value mean=-0.00 |v|=0.66 |v|>0.9=38.3% | v*z align=0.45 | |v-z|=0.55
+[diag it 55] states/game=13213 | cross-game dup=26.6% | novel vs buffer=69.5% | buffer n=67210 distinct=83.0% dup=17.0%
+[diag it 55] buffer pi entropy=2.83 bits | one-hot=7.6% | pi max mass=0.48
+iter  55  loss 2.6127 (pol 2.160 val 0.453)  buffer 67210 (4000g)  arena 0W/100L/0D (0.00) 29ply/g  [682.7s]
+[diag it 56] plies avg=17.62 med=15 min=7 max=46 | W=133 B=67 D=0
+[diag it 56] ply hist (upper-exclusive) 8:9 9:7 10:15 11:5 12:19 13:6 14:21 15:7 16:17 17:6 18:11 19:7 20:14 24:12 30:22 40:14 65:8
+[diag it 56] mcts depth avg=2.9 max=13 | leaves/search=1070.2 | nodes/search=1068.5 | terminal hits/game=6827.0 | batch mean=23.4
+[diag it 56] mcts root width=24.6/25 | visit entropy=3.02 bits | chosen prob=0.32 | net policy entropy=3.22 bits
+[diag it 56] net root value mean=0.00 |v|=0.65 |v|>0.9=35.7% | v*z align=0.44 | |v-z|=0.56
+[diag it 56] states/game=13114 | cross-game dup=27.1% | novel vs buffer=69.6% | buffer n=67476 distinct=82.2% dup=17.8%
+[diag it 56] buffer pi entropy=2.77 bits | one-hot=8.5% | pi max mass=0.49
+iter  56  loss 2.6202 (pol 2.160 val 0.461)  buffer 67476 (4000g)  arena 54W/46L/0D (0.54) 38ply/g  [743.1s]
+[diag it 57] plies avg=17.52 med=15 min=7 max=63 | W=145 B=55 D=0
+[diag it 57] ply hist (upper-exclusive) 8:10 9:2 10:15 11:3 12:25 13:9 14:18 15:6 16:17 17:10 18:15 19:4 20:6 24:24 30:19 40:10 65:7
+[diag it 57] mcts depth avg=3.0 max=13 | leaves/search=1062.1 | nodes/search=1061.2 | terminal hits/game=6952.0 | batch mean=23.2
+[diag it 57] mcts root width=24.6/25 | visit entropy=2.98 bits | chosen prob=0.32 | net policy entropy=3.14 bits
+[diag it 57] net root value mean=0.06 |v|=0.66 |v|>0.9=38.7% | v*z align=0.48 | |v-z|=0.52
+[diag it 57] states/game=12925 | cross-game dup=26.6% | novel vs buffer=69.1% | buffer n=67712 distinct=82.8% dup=17.2%
+[diag it 57] buffer pi entropy=2.72 bits | one-hot=9.6% | pi max mass=0.50
+iter  57  loss 2.6164 (pol 2.164 val 0.452)  buffer 67712 (4000g)  arena 50W/50L/0D (0.50) 38ply/g  [780.6s]
+[diag it 58] plies avg=17.96 med=15 min=7 max=61 | W=134 B=66 D=0
+[diag it 58] ply hist (upper-exclusive) 8:2 9:3 10:20 11:10 12:23 13:4 14:18 15:7 16:15 17:7 18:12 19:7 20:5 24:23 30:20 40:20 65:4
+[diag it 58] mcts depth avg=3.0 max=12 | leaves/search=1078.6 | nodes/search=1080.5 | terminal hits/game=6759.9 | batch mean=23.3
+[diag it 58] mcts root width=24.6/25 | visit entropy=2.95 bits | chosen prob=0.33 | net policy entropy=3.12 bits
+[diag it 58] net root value mean=0.05 |v|=0.66 |v|>0.9=34.9% | v*z align=0.46 | |v-z|=0.54
+[diag it 58] states/game=13220 | cross-game dup=26.2% | novel vs buffer=70.2% | buffer n=68186 distinct=83.2% dup=16.9%
+[diag it 58] buffer pi entropy=2.65 bits | one-hot=10.7% | pi max mass=0.52
+iter  58  loss 2.6130 (pol 2.161 val 0.452)  buffer 68186 (4000g)  arena 100W/0L/0D (1.00) 36ply/g  BEST [729.1s]
+[diag it 59] plies avg=18.59 med=15 min=7 max=64 | W=146 B=54 D=0
+[diag it 59] ply hist (upper-exclusive) 8:10 9:3 10:16 11:2 12:15 13:9 14:26 15:7 16:21 17:4 18:17 19:3 20:4 24:14 30:16 40:23 65:10
+[diag it 59] mcts depth avg=3.0 max=11 | leaves/search=1069.3 | nodes/search=1071.8 | terminal hits/game=6951.5 | batch mean=23.4
+[diag it 59] mcts root width=24.6/25 | visit entropy=2.93 bits | chosen prob=0.34 | net policy entropy=3.06 bits
+[diag it 59] net root value mean=0.06 |v|=0.66 |v|>0.9=36.0% | v*z align=0.47 | |v-z|=0.53
+[diag it 59] states/game=13634 | cross-game dup=25.0% | novel vs buffer=70.1% | buffer n=68586 distinct=84.6% dup=15.4%
+[diag it 59] buffer pi entropy=2.76 bits | one-hot=9.3% | pi max mass=0.49
+iter  59  loss 2.6150 (pol 2.161 val 0.454)  buffer 68586 (4000g)  arena 62W/38L/0D (0.62) 26ply/g  BEST [662.5s]
+[diag it 60] plies avg=18.23 med=16 min=7 max=55 | W=136 B=64 D=0
+[diag it 60] ply hist (upper-exclusive) 8:9 10:13 11:2 12:20 13:11 14:22 15:6 16:14 17:12 18:19 19:4 20:7 24:24 30:10 40:18 65:9
+[diag it 60] mcts depth avg=3.0 max=13 | leaves/search=1063.3 | nodes/search=1059.8 | terminal hits/game=7196.6 | batch mean=23.3
+[diag it 60] mcts root width=24.6/25 | visit entropy=2.91 bits | chosen prob=0.34 | net policy entropy=3.07 bits
+[diag it 60] net root value mean=0.01 |v|=0.66 |v|>0.9=37.2% | v*z align=0.45 | |v-z|=0.55
+[diag it 60] states/game=13034 | cross-game dup=26.4% | novel vs buffer=69.5% | buffer n=68611 distinct=83.0% dup=17.0%
+[diag it 60] buffer pi entropy=2.77 bits | one-hot=9.2% | pi max mass=0.49
+iter  60  loss 2.6276 (pol 2.167 val 0.461)  buffer 68611 (4000g)  arena 50W/50L/0D (0.50) 29ply/g  [697.5s]
+[diag it 61] plies avg=17.34 med=15 min=7 max=61 | W=142 B=58 D=0
+[diag it 61] ply hist (upper-exclusive) 8:8 9:7 10:15 11:7 12:16 13:6 14:28 15:8 16:16 17:4 18:16 19:7 20:9 24:18 30:15 40:13 65:7
+[diag it 61] mcts depth avg=3.0 max=15 | leaves/search=1059.4 | nodes/search=1064.7 | terminal hits/game=6756.7 | batch mean=23.2
+[diag it 61] mcts root width=24.7/25 | visit entropy=2.94 bits | chosen prob=0.33 | net policy entropy=3.13 bits
+[diag it 61] net root value mean=0.09 |v|=0.66 |v|>0.9=37.0% | v*z align=0.48 | |v-z|=0.52
+[diag it 61] states/game=12734 | cross-game dup=26.9% | novel vs buffer=68.9% | buffer n=68756 distinct=84.6% dup=15.4%
+[diag it 61] buffer pi entropy=2.75 bits | one-hot=9.5% | pi max mass=0.49
+iter  61  loss 2.6135 (pol 2.158 val 0.456)  buffer 68756 (4000g)  arena 45W/55L/0D (0.45) 25ply/g  [614.6s]
+[diag it 62] plies avg=17.86 med=16 min=7 max=46 | W=145 B=55 D=0
+[diag it 62] ply hist (upper-exclusive) 8:4 9:2 10:13 11:4 12:25 13:9 14:21 15:1 16:16 17:11 18:19 19:7 20:7 24:22 30:18 40:17 65:4
+[diag it 62] mcts depth avg=3.0 max=12 | leaves/search=1047.1 | nodes/search=1042.8 | terminal hits/game=7336.9 | batch mean=23.0
+[diag it 62] mcts root width=24.7/25 | visit entropy=2.99 bits | chosen prob=0.32 | net policy entropy=3.16 bits
+[diag it 62] net root value mean=0.04 |v|=0.68 |v|>0.9=40.5% | v*z align=0.51 | |v-z|=0.49
+[diag it 62] states/game=12942 | cross-game dup=26.3% | novel vs buffer=70.0% | buffer n=68960 distinct=83.8% dup=16.2%
+[diag it 62] buffer pi entropy=2.80 bits | one-hot=8.3% | pi max mass=0.48
+iter  62  loss 2.6154 (pol 2.160 val 0.455)  buffer 68960 (4000g)  arena 55W/45L/0D (0.55) 21ply/g  BEST [571.7s]
+[diag it 63] plies avg=18.27 med=16 min=7 max=53 | W=131 B=69 D=0
+[diag it 63] ply hist (upper-exclusive) 8:5 9:2 10:12 11:7 12:16 13:6 14:19 15:9 16:19 17:9 18:11 19:11 20:12 24:23 30:17 40:17 65:5
+[diag it 63] mcts depth avg=3.1 max=12 | leaves/search=1051.0 | nodes/search=1053.3 | terminal hits/game=7353.3 | batch mean=23.1
+[diag it 63] mcts root width=24.7/25 | visit entropy=2.95 bits | chosen prob=0.33 | net policy entropy=3.11 bits
+[diag it 63] net root value mean=0.10 |v|=0.67 |v|>0.9=38.4% | v*z align=0.46 | |v-z|=0.54
+[diag it 63] states/game=13251 | cross-game dup=25.9% | novel vs buffer=72.4% | buffer n=69084 distinct=83.8% dup=16.2%
+[diag it 63] buffer pi entropy=2.76 bits | one-hot=9.1% | pi max mass=0.49
+iter  63  loss 2.6089 (pol 2.161 val 0.448)  buffer 69084 (4000g)  arena 93W/7L/0D (0.93) 30ply/g  BEST [668.1s]
+[diag it 64] plies avg=18.36 med=16 min=7 max=47 | W=139 B=61 D=0
+[diag it 64] ply hist (upper-exclusive) 8:8 9:2 10:17 11:6 12:20 13:6 14:18 15:6 16:17 17:10 18:16 19:4 20:8 24:14 30:20 40:20 65:8
+[diag it 64] mcts depth avg=3.0 max=11 | leaves/search=1076.6 | nodes/search=1077.3 | terminal hits/game=6794.7 | batch mean=23.3
+[diag it 64] mcts root width=24.6/25 | visit entropy=2.99 bits | chosen prob=0.32 | net policy entropy=3.12 bits
+[diag it 64] net root value mean=0.05 |v|=0.66 |v|>0.9=36.4% | v*z align=0.48 | |v-z|=0.52
+[diag it 64] states/game=13798 | cross-game dup=25.2% | novel vs buffer=70.9% | buffer n=69675 distinct=83.0% dup=17.1%
+[diag it 64] buffer pi entropy=2.72 bits | one-hot=10.3% | pi max mass=0.50
+iter  64  loss 2.6063 (pol 2.157 val 0.449)  buffer 69675 (4000g)  arena 100W/0L/0D (1.00) 42ply/g  BEST [853.5s]
+[diag it 65] plies avg=17.64 med=15 min=7 max=45 | W=143 B=57 D=0
+[diag it 65] ply hist (upper-exclusive) 8:9 9:5 10:18 11:11 12:20 13:6 14:19 15:7 16:18 17:1 18:8 19:3 20:14 24:23 30:11 40:20 65:7
+[diag it 65] mcts depth avg=3.0 max=13 | leaves/search=1084.7 | nodes/search=1088.0 | terminal hits/game=6362.4 | batch mean=23.5
+[diag it 65] mcts root width=24.6/25 | visit entropy=2.93 bits | chosen prob=0.33 | net policy entropy=3.08 bits
+[diag it 65] net root value mean=0.04 |v|=0.67 |v|>0.9=37.7% | v*z align=0.49 | |v-z|=0.51
+[diag it 65] states/game=13220 | cross-game dup=25.8% | novel vs buffer=70.6% | buffer n=70052 distinct=83.2% dup=16.8%
+[diag it 65] buffer pi entropy=2.66 bits | one-hot=11.6% | pi max mass=0.51
+iter  65  loss 2.6060 (pol 2.158 val 0.448)  buffer 70052 (4000g)  arena 54W/46L/0D (0.54) 32ply/g  [714.1s]
+[diag it 66] plies avg=17.10 med=15 min=7 max=42 | W=138 B=62 D=0
+[diag it 66] ply hist (upper-exclusive) 8:13 9:4 10:15 11:6 12:19 13:6 14:17 15:6 16:26 17:13 18:13 19:3 20:8 24:11 30:17 40:18 65:5
+[diag it 66] mcts depth avg=3.0 max=12 | leaves/search=1069.0 | nodes/search=1067.6 | terminal hits/game=6588.2 | batch mean=23.3
+[diag it 66] mcts root width=24.7/25 | visit entropy=2.93 bits | chosen prob=0.33 | net policy entropy=3.11 bits
+[diag it 66] net root value mean=0.00 |v|=0.66 |v|>0.9=34.8% | v*z align=0.44 | |v-z|=0.56
+[diag it 66] states/game=12634 | cross-game dup=26.5% | novel vs buffer=68.9% | buffer n=70071 distinct=84.3% dup=15.7%
+[diag it 66] buffer pi entropy=2.76 bits | one-hot=9.1% | pi max mass=0.49
+iter  66  loss 2.6020 (pol 2.157 val 0.445)  buffer 70071 (4000g)  arena 27W/73L/0D (0.27) 27ply/g  [612.7s]
+[diag it 67] plies avg=17.61 med=15 min=7 max=52 | W=128 B=72 D=0
+[diag it 67] ply hist (upper-exclusive) 8:9 9:4 10:19 11:8 12:15 13:11 14:18 15:8 16:14 17:8 18:13 19:7 20:12 24:14 30:13 40:22 65:5
+[diag it 67] mcts depth avg=3.0 max=13 | leaves/search=1077.5 | nodes/search=1073.8 | terminal hits/game=6632.9 | batch mean=23.4
+[diag it 67] mcts root width=24.6/25 | visit entropy=2.92 bits | chosen prob=0.34 | net policy entropy=3.07 bits
+[diag it 67] net root value mean=0.01 |v|=0.66 |v|>0.9=37.0% | v*z align=0.45 | |v-z|=0.55
+[diag it 67] states/game=13007 | cross-game dup=26.6% | novel vs buffer=69.1% | buffer n=70418 distinct=85.2% dup=14.8%
+[diag it 67] buffer pi entropy=2.76 bits | one-hot=9.8% | pi max mass=0.49
+iter  67  loss 2.5931 (pol 2.146 val 0.447)  buffer 70418 (4000g)  arena 62W/38L/0D (0.62) 43ply/g  BEST [835.9s]
+[diag it 68] plies avg=19.00 med=17 min=7 max=57 | W=138 B=62 D=0
+diag it 68] ply hist (upper-exclusive) 8:3 9:3 10:14 11:3 12:11 13:7 14:19 15:8 16:21 17:5 18:11 19:9 20:11 24:20 30:32 40:18 65:5
+diag it 68] mcts depth avg=3.1 max=13 | leaves/search=1063.2 | nodes/search=1065.2 | terminal hits/game=7543.9 | batch mean=23.2
+diag it 68] mcts root width=24.6/25 | visit entropy=2.91 bits | chosen prob=0.33 | net policy entropy=3.09 bits
+diag it 68] net root value mean=0.07 |v|=0.66 |v|>0.9=37.7% | v*z align=0.47 | |v-z|=0.53
+diag it 68] states/game=13625 | cross-game dup=24.6% | novel vs buffer=72.8% | buffer n=70833 distinct=83.2% dup=16.8%
+diag it 68] buffer pi entropy=2.61 bits | one-hot=11.0% | pi max mass=0.52
+iter  68  loss 2.5995 (pol 2.153 val 0.447)  buffer 70833 (4000g)  arena 74W/26L/0D (0.74) 33ply/g  BEST [790.6s]
+[diag it 69] plies avg=17.59 med=15 min=7 max=47 | W=139 B=61 D=0
+[diag it 69] ply hist (upper-exclusive) 8:15 9:3 10:17 11:7 12:22 13:4 14:14 15:10 16:17 17:6 18:12 19:8 20:7 24:20 30:9 40:21 65:8
+[diag it 69] mcts depth avg=3.0 max=12 | leaves/search=1074.0 | nodes/search=1067.4 | terminal hits/game=6688.8 | batch mean=23.2
+[diag it 69] mcts root width=24.7/25 | visit entropy=2.90 bits | chosen prob=0.35 | net policy entropy=3.09 bits
+[diag it 69] net root value mean=0.01 |v|=0.66 |v|>0.9=36.5% | v*z align=0.48 | |v-z|=0.52
+[diag it 69] states/game=12639 | cross-game dup=28.0% | novel vs buffer=66.5% | buffer n=70950 distinct=83.4% dup=16.6%
+[diag it 69] buffer pi entropy=2.69 bits | one-hot=11.1% | pi max mass=0.50
+iter  69  loss 2.5914 (pol 2.145 val 0.446)  buffer 70950 (4000g)  arena 50W/50L/0D (0.50) 27ply/g  [652.8s]                                                   e]
+[diag it 70] plies avg=17.51 med=15 min=7 max=44 | W=148 B=52 D=0
+[diag it 70] ply hist (upper-exclusive) 8:9 9:2 10:14 11:3 12:30 13:4 14:29 15:7 16:17 17:3 18:7 19:5 20:9 24:16 30:25 40:16 65:4
+[diag it 70] mcts depth avg=2.9 max=13 | leaves/search=1052.3 | nodes/search=1040.7 | terminal hits/game=7228.8 | batch mean=23.2
+[diag it 70] mcts root width=24.6/25 | visit entropy=3.01 bits | chosen prob=0.32 | net policy entropy=3.18 bits
+[diag it 70] net root value mean=-0.02 |v|=0.68 |v|>0.9=38.7% | v*z align=0.50 | |v-z|=0.50
+[diag it 70] states/game=12828 | cross-game dup=27.2% | novel vs buffer=69.0% | buffer n=70939 distinct=83.0% dup=17.0%
+[diag it 70] buffer pi entropy=2.78 bits | one-hot=9.6% | pi max mass=0.49
+iter  70  loss 2.5996 (pol 2.156 val 0.444)  buffer 70939 (4000g)  arena 85W/15L/0D (0.85) 31ply/g  BEST [650.2s]
+[diag it 71] plies avg=17.46 med=15 min=7 max=53 | W=142 B=58 D=0
+[diag it 71] ply hist (upper-exclusive) 8:9 9:3 10:11 11:6 12:24 13:4 14:20 15:9 16:21 17:7 18:15 19:7 20:9 24:18 30:18 40:14 65:5
+[diag it 71] mcts depth avg=3.0 max=11 | leaves/search=1063.4 | nodes/search=1058.8 | terminal hits/game=6900.7 | batch mean=23.1
+[diag it 71] mcts root width=24.7/25 | visit entropy=2.99 bits | chosen prob=0.32 | net policy entropy=3.14 bits
+[diag it 71] net root value mean=0.02 |v|=0.67 |v|>0.9=39.6% | v*z align=0.47 | |v-z|=0.53
+[diag it 71] states/game=12945 | cross-game dup=26.7% | novel vs buffer=69.0% | buffer n=70987 distinct=84.8% dup=15.2%
+[diag it 71] buffer pi entropy=2.71 bits | one-hot=11.5% | pi max mass=0.50
+iter  71  loss 2.5993 (pol 2.157 val 0.442)  buffer 70987 (4000g)  arena 50W/50L/0D (0.50) 19ply/g  [575.1s]
+[diag it 72] plies avg=18.73 med=16 min=7 max=56 | W=135 B=65 D=0
+[diag it 72] ply hist (upper-exclusive) 8:9 9:3 10:19 11:5 12:15 13:5 14:16 15:9 16:16 17:8 18:10 19:6 20:10 24:25 30:11 40:22 65:11
+[diag it 72] mcts depth avg=3.0 max=12 | leaves/search=1064.6 | nodes/search=1066.0 | terminal hits/game=7119.0 | batch mean=23.3
+[diag it 72] mcts root width=24.6/25 | visit entropy=2.92 bits | chosen prob=0.34 | net policy entropy=3.09 bits
+[diag it 72] net root value mean=0.01 |v|=0.67 |v|>0.9=37.5% | v*z align=0.45 | |v-z|=0.55
+[diag it 72] states/game=13811 | cross-game dup=24.8% | novel vs buffer=71.3% | buffer n=71117 distinct=84.8% dup=15.2%
+[diag it 72] buffer pi entropy=2.85 bits | one-hot=9.5% | pi max mass=0.47
+iter  72  loss 2.6028 (pol 2.154 val 0.449)  buffer 71117 (4000g)  arena 29W/71L/0D (0.29) 19ply/g  [573.7s]
+[diag it 73] plies avg=17.43 med=15 min=7 max=49 | W=147 B=53 D=0
+[diag it 73] ply hist (upper-exclusive) 8:6 10:22 11:1 12:21 13:9 14:18 15:7 16:21 17:9 18:17 19:6 20:9 24:16 30:18 40:15 65:5
+[diag it 73] mcts depth avg=3.0 max=14 | leaves/search=1048.7 | nodes/search=1041.4 | terminal hits/game=7368.4 | batch mean=23.0
+[diag it 73] mcts root width=24.6/25 | visit entropy=3.03 bits | chosen prob=0.31 | net policy entropy=3.22 bits
+[diag it 73] net root value mean=0.06 |v|=0.69 |v|>0.9=41.0% | v*z align=0.53 | |v-z|=0.47
+[diag it 73] states/game=12638 | cross-game dup=27.0% | novel vs buffer=69.1% | buffer n=71311 distinct=83.8% dup=16.2%
+[diag it 73] buffer pi entropy=2.73 bits | one-hot=10.5% | pi max mass=0.49
+iter  73  loss 2.5899 (pol 2.157 val 0.433)  buffer 71311 (4000g)  arena 35W/65L/0D (0.35) 16ply/g  [495.4s]
+[diag it 74] plies avg=19.04 med=17 min=7 max=57 | W=142 B=58 D=0
+[diag it 74] ply hist (upper-exclusive) 8:10 10:7 11:6 12:20 13:7 14:15 15:5 16:15 17:6 18:17 19:8 20:9 24:22 30:26 40:21 65:6
+[diag it 74] mcts depth avg=3.0 max=12 | leaves/search=1080.4 | nodes/search=1074.6 | terminal hits/game=7273.7 | batch mean=23.2
+[diag it 74] mcts root width=24.6/25 | visit entropy=2.96 bits | chosen prob=0.33 | net policy entropy=3.18 bits
+[diag it 74] net root value mean=0.00 |v|=0.69 |v|>0.9=40.2% | v*z align=0.48 | |v-z|=0.52
+[diag it 74] states/game=13846 | cross-game dup=24.8% | novel vs buffer=70.7% | buffer n=71791 distinct=84.8% dup=15.2%
+[diag it 74] buffer pi entropy=2.72 bits | one-hot=9.1% | pi max mass=0.50
+iter  74  loss 2.5931 (pol 2.155 val 0.438)  buffer 71791 (4000g)  arena 50W/50L/0D (0.50) 18ply/g  [559.7s]
+[diag it 75] plies avg=18.49 med=16 min=7 max=49 | W=124 B=76 D=0
+[diag it 75] ply hist (upper-exclusive) 8:7 10:11 11:7 12:16 13:5 14:17 15:14 16:11 17:12 18:13 19:10 20:13 24:15 30:25 40:21 65:3
+[diag it 75] mcts depth avg=3.0 max=12 | leaves/search=1089.9 | nodes/search=1089.1 | terminal hits/game=6901.8 | batch mean=23.3
+[diag it 75] mcts root width=24.6/25 | visit entropy=3.01 bits | chosen prob=0.32 | net policy entropy=3.21 bits
+[diag it 75] net root value mean=0.04 |v|=0.67 |v|>0.9=37.8% | v*z align=0.43 | |v-z|=0.57
+[diag it 75] states/game=13808 | cross-game dup=24.4% | novel vs buffer=71.5% | buffer n=71871 distinct=84.9% dup=15.2%
+[diag it 75] buffer pi entropy=2.71 bits | one-hot=9.5% | pi max mass=0.50
+iter  75  loss 2.5966 (pol 2.154 val 0.442)  buffer 71871 (4000g)  arena 66W/34L/0D (0.66) 34ply/g  BEST [804.8s]
+[diag it 76] plies avg=18.00 med=17 min=7 max=49 | W=137 B=63 D=0
+[diag it 76] ply hist (upper-exclusive) 8:10 9:3 10:16 11:5 12:18 13:9 14:16 15:10 16:7 17:3 18:16 19:9 20:14 24:26 30:14 40:15 65:9
+[diag it 76] mcts depth avg=3.0 max=11 | leaves/search=1084.0 | nodes/search=1076.8 | terminal hits/game=6949.0 | batch mean=23.2
+[diag it 76] mcts root width=24.6/25 | visit entropy=3.01 bits | chosen prob=0.32 | net policy entropy=3.17 bits
+[diag it 76] net root value mean=0.01 |v|=0.67 |v|>0.9=39.4% | v*z align=0.45 | |v-z|=0.55
+[diag it 76] states/game=13210 | cross-game dup=25.6% | novel vs buffer=69.6% | buffer n=71945 distinct=83.2% dup=16.8%
+[diag it 76] buffer pi entropy=2.77 bits | one-hot=9.1% | pi max mass=0.49
+iter  76  loss 2.5900 (pol 2.153 val 0.437)  buffer 71945 (4000g)  arena 32W/68L/0D (0.32) 30ply/g  [706.6s]
+[diag it 77] plies avg=17.97 med=16 min=7 max=57 | W=138 B=62 D=0
+[diag it 77] ply hist (upper-exclusive) 8:10 9:1 10:15 11:7 12:17 13:4 14:19 15:7 16:19 17:10 18:12 19:8 20:15 24:18 30:12 40:21 65:5
+[diag it 77] mcts depth avg=3.0 max=13 | leaves/search=1069.9 | nodes/search=1060.6 | terminal hits/game=7075.6 | batch mean=23.4
+[diag it 77] mcts root width=24.6/25 | visit entropy=2.93 bits | chosen prob=0.34 | net policy entropy=3.12 bits
+[diag it 77] net root value mean=0.04 |v|=0.69 |v|>0.9=38.8% | v*z align=0.46 | |v-z|=0.54
+[diag it 77] states/game=12883 | cross-game dup=26.2% | novel vs buffer=69.2% | buffer n=72036 distinct=84.3% dup=15.7%
+[diag it 77] buffer pi entropy=2.63 bits | one-hot=11.0% | pi max mass=0.51
+iter  77  loss 2.5948 (pol 2.153 val 0.441)  buffer 72036 (4000g)  arena 50W/50L/0D (0.50) 25ply/g  [605.3s]
+[diag it 78] plies avg=18.70 med=16 min=7 max=50 | W=128 B=72 D=0
+[diag it 78] ply hist (upper-exclusive) 8:10 9:1 10:11 11:5 12:12 13:9 14:17 15:8 16:18 17:9 18:10 19:4 20:14 24:27 30:20 40:19 65:6
+[diag it 78] mcts depth avg=3.0 max=12 | leaves/search=1058.5 | nodes/search=1049.7 | terminal hits/game=7431.3 | batch mean=23.2
+[diag it 78] mcts root width=24.6/25 | visit entropy=2.98 bits | chosen prob=0.32 | net policy entropy=3.12 bits
+[diag it 78] net root value mean=0.01 |v|=0.68 |v|>0.9=39.7% | v*z align=0.47 | |v-z|=0.53
+[diag it 78] states/game=13745 | cross-game dup=24.7% | novel vs buffer=71.4% | buffer n=72184 distinct=85.0% dup=14.9%
+[diag it 78] buffer pi entropy=2.70 bits | one-hot=10.2% | pi max mass=0.50
+iter  78  loss 2.5959 (pol 2.154 val 0.441)  buffer 72184 (4000g)  arena 50W/50L/0D (0.50) 34ply/g  [703.6s]
+[diag it 79] plies avg=17.23 med=15 min=7 max=54 | W=141 B=59 D=0
+[diag it 79] ply hist (upper-exclusive) 8:8 10:15 11:3 12:20 13:12 14:24 15:8 16:17 17:7 18:11 19:4 20:8 24:26 30:22 40:14 65:1
+[diag it 79] mcts depth avg=2.9 max=12 | leaves/search=1032.4 | nodes/search=1018.9 | terminal hits/game=7690.0 | batch mean=23.1
+[diag it 79] mcts root width=24.7/25 | visit entropy=3.06 bits | chosen prob=0.31 | net policy entropy=3.25 bits
+[diag it 79] net root value mean=0.06 |v|=0.68 |v|>0.9=39.5% | v*z align=0.46 | |v-z|=0.54
+[diag it 79] states/game=12384 | cross-game dup=27.6% | novel vs buffer=68.6% | buffer n=71913 distinct=84.4% dup=15.6%
+[diag it 79] buffer pi entropy=2.75 bits | one-hot=9.4% | pi max mass=0.49
+iter  79  loss 2.6018 (pol 2.160 val 0.442)  buffer 71913 (4000g)  arena 74W/26L/0D (0.74) 35ply/g  BEST [725.0s]
+[diag it 80] plies avg=18.79 med=17 min=7 max=52 | W=135 B=65 D=0
+[diag it 80] ply hist (upper-exclusive) 8:10 9:1 10:9 11:1 12:18 13:9 14:15 15:9 16:19 17:5 18:16 19:9 20:11 24:21 30:23 40:15 65:9
+[diag it 80] mcts depth avg=3.0 max=14 | leaves/search=1050.2 | nodes/search=1046.4 | terminal hits/game=7651.6 | batch mean=23.1
+[diag it 80] mcts root width=24.6/25 | visit entropy=3.04 bits | chosen prob=0.32 | net policy entropy=3.18 bits
+[diag it 80] net root value mean=0.07 |v|=0.69 |v|>0.9=42.2% | v*z align=0.47 | |v-z|=0.53
+[diag it 80] states/game=13635 | cross-game dup=24.6% | novel vs buffer=72.7% | buffer n=72024 distinct=83.9% dup=16.1%
+[diag it 80] buffer pi entropy=2.73 bits | one-hot=9.5% | pi max mass=0.49
+iter  80  loss 2.6081 (pol 2.166 val 0.442)  buffer 72024 (4000g)  arena 64W/36L/0D (0.64) 32ply/g  BEST [755.7s]
+[diag it 81] plies avg=17.48 med=16 min=7 max=58 | W=143 B=57 D=0
+[diag it 81] ply hist (upper-exclusive) 8:11 9:1 10:15 11:6 12:21 13:6 14:15 15:7 16:18 17:11 18:20 19:4 20:5 24:16 30:25 40:16 65:3
+[diag it 81] mcts depth avg=3.0 max=15 | leaves/search=1045.1 | nodes/search=1042.1 | terminal hits/game=7374.6 | batch mean=23.1
+[diag it 81] mcts root width=24.7/25 | visit entropy=3.08 bits | chosen prob=0.31 | net policy entropy=3.25 bits
+[diag it 81] net root value mean=0.07 |v|=0.67 |v|>0.9=39.4% | v*z align=0.50 | |v-z|=0.50
+[diag it 81] states/game=12749 | cross-game dup=26.5% | novel vs buffer=69.7% | buffer n=72053 distinct=83.7% dup=16.4%
+[diag it 81] buffer pi entropy=2.78 bits | one-hot=9.3% | pi max mass=0.48
+iter  81  loss 2.6072 (pol 2.167 val 0.441)  buffer 72053 (4000g)  arena 32W/68L/0D (0.32) 27ply/g  [611.7s]
+[diag it 82] plies avg=17.23 med=16 min=7 max=46 | W=141 B=59 D=0
+[diag it 82] ply hist (upper-exclusive) 8:9 9:1 10:18 11:4 12:15 13:5 14:19 15:7 16:22 17:11 18:13 19:8 20:16 24:21 30:16 40:11 65:4
+[diag it 82] mcts depth avg=2.9 max=15 | leaves/search=1046.8 | nodes/search=1033.7 | terminal hits/game=7480.4 | batch mean=23.1
+[diag it 82] mcts root width=24.6/25 | visit entropy=3.03 bits | chosen prob=0.31 | net policy entropy=3.25 bits
+[diag it 82] net root value mean=0.01 |v|=0.67 |v|>0.9=40.0% | v*z align=0.47 | |v-z|=0.53
+[diag it 82] states/game=12417 | cross-game dup=27.1% | novel vs buffer=68.8% | buffer n=71927 distinct=83.2% dup=16.8%
+[diag it 82] buffer pi entropy=2.68 bits | one-hot=10.1% | pi max mass=0.51
+iter  82  loss 2.6076 (pol 2.170 val 0.437)  buffer 71927 (4000g)  arena 65W/35L/0D (0.65) 34ply/g  BEST [703.8s]
+[diag it 83] plies avg=19.03 med=17 min=7 max=62 | W=148 B=52 D=0
+[diag it 83] ply hist (upper-exclusive) 8:5 9:1 10:11 11:2 12:18 13:7 14:21 15:4 16:22 17:7 18:14 19:5 20:16 24:21 30:18 40:22 65:6
+[diag it 83] mcts depth avg=3.1 max=13 | leaves/search=1068.1 | nodes/search=1064.3 | terminal hits/game=7588.5 | batch mean=23.0
+[diag it 83] mcts root width=24.7/25 | visit entropy=2.92 bits | chosen prob=0.34 | net policy entropy=3.10 bits
+[diag it 83] net root value mean=0.10 |v|=0.66 |v|>0.9=37.5% | v*z align=0.47 | |v-z|=0.53
+[diag it 83] states/game=13596 | cross-game dup=24.6% | novel vs buffer=71.3% | buffer n=72080 distinct=84.4% dup=15.6%
+[diag it 83] buffer pi entropy=2.73 bits | one-hot=10.5% | pi max mass=0.49
+iter  83  loss 2.6122 (pol 2.173 val 0.439)  buffer 72080 (4000g)  arena 30W/70L/0D (0.30) 39ply/g  [844.9s]
+[diag it 84] plies avg=19.64 med=17 min=7 max=53 | W=143 B=57 D=0
+[diag it 84] ply hist (upper-exclusive) 8:3 9:4 10:7 11:6 12:20 13:8 14:17 15:4 16:22 17:8 18:16 19:4 20:13 24:16 30:17 40:24 65:11
+[diag it 84] mcts depth avg=3.1 max=14 | leaves/search=1057.8 | nodes/search=1055.6 | terminal hits/game=7759.4 | batch mean=23.1
+[diag it 84] mcts root width=24.6/25 | visit entropy=2.95 bits | chosen prob=0.34 | net policy entropy=3.07 bits
+[diag it 84] net root value mean=0.07 |v|=0.70 |v|>0.9=42.5% | v*z align=0.48 | |v-z|=0.52
+[diag it 84] states/game=13974 | cross-game dup=24.2% | novel vs buffer=72.7% | buffer n=72334 distinct=85.1% dup=14.9%
+[diag it 84] buffer pi entropy=2.77 bits | one-hot=10.1% | pi max mass=0.49
+iter  84  loss 2.6064 (pol 2.171 val 0.436)  buffer 72334 (4000g)  arena 25W/75L/0D (0.25) 37ply/g  [843.8s]
+[diag it 85] plies avg=19.23 med=17 min=7 max=60 | W=130 B=70 D=0
+[diag it 85] ply hist (upper-exclusive) 8:4 9:6 10:10 11:6 12:15 13:2 14:27 15:8 16:10 17:11 18:12 19:5 20:14 24:18 30:23 40:22 65:7
+[diag it 85] mcts depth avg=3.0 max=13 | leaves/search=1071.4 | nodes/search=1069.0 | terminal hits/game=7357.9 | batch mean=23.4
+[diag it 85] mcts root width=24.6/25 | visit entropy=2.91 bits | chosen prob=0.35 | net policy entropy=3.08 bits
+[diag it 85] net root value mean=0.05 |v|=0.68 |v|>0.9=39.3% | v*z align=0.42 | |v-z|=0.58
+[diag it 85] states/game=13832 | cross-game dup=25.4% | novel vs buffer=71.0% | buffer n=72651 distinct=84.5% dup=15.6%
+[diag it 85] buffer pi entropy=2.77 bits | one-hot=8.2% | pi max mass=0.49
+iter  85  loss 2.6110 (pol 2.166 val 0.445)  buffer 72651 (4000g)  arena 50W/50L/0D (0.50) 33ply/g  [756.7s]
+[diag it 86] plies avg=17.46 med=16 min=7 max=43 | W=140 B=60 D=0
+[diag it 86] ply hist (upper-exclusive) 8:11 9:1 10:13 11:7 12:23 13:11 14:17 15:7 16:10 17:5 18:16 19:8 20:11 24:28 30:8 40:20 65:4
+[diag it 86] mcts depth avg=2.9 max=12 | leaves/search=1045.8 | nodes/search=1037.1 | terminal hits/game=7350.3 | batch mean=23.1
+[diag it 86] mcts root width=24.6/25 | visit entropy=3.02 bits | chosen prob=0.32 | net policy entropy=3.14 bits
+[diag it 86] net root value mean=0.01 |v|=0.69 |v|>0.9=40.1% | v*z align=0.49 | |v-z|=0.51
+[diag it 86] states/game=12572 | cross-game dup=27.6% | novel vs buffer=69.5% | buffer n=72723 distinct=84.7% dup=15.3%
+[diag it 86] buffer pi entropy=2.64 bits | one-hot=10.5% | pi max mass=0.51
+iter  86  loss 2.6065 (pol 2.171 val 0.436)  buffer 72723 (4000g)  arena 0W/100L/0D (0.00) 27ply/g  [623.6s]
+[diag it 87] plies avg=17.48 med=15 min=7 max=47 | W=145 B=55 D=0
+[diag it 87] ply hist (upper-exclusive) 8:7 9:3 10:24 11:3 12:28 13:5 14:19 15:7 16:13 17:3 18:13 19:7 20:7 24:22 30:15 40:19 65:5
+[diag it 87] mcts depth avg=3.0 max=16 | leaves/search=1058.6 | nodes/search=1045.1 | terminal hits/game=7149.1 | batch mean=23.3
+[diag it 87] mcts root width=24.6/25 | visit entropy=3.03 bits | chosen prob=0.32 | net policy entropy=3.18 bits
+[diag it 87] net root value mean=0.02 |v|=0.67 |v|>0.9=38.4% | v*z align=0.49 | |v-z|=0.51
+[diag it 87] states/game=12786 | cross-game dup=26.9% | novel vs buffer=69.5% | buffer n=72698 distinct=85.7% dup=14.3%
+[diag it 87] buffer pi entropy=2.82 bits | one-hot=8.7% | pi max mass=0.48
+iter  87  loss 2.6060 (pol 2.178 val 0.428)  buffer 72698 (4000g)  arena 77W/23L/0D (0.77) 37ply/g  BEST [773.6s]
+[diag it 88] plies avg=18.02 med=17 min=7 max=49 | W=145 B=55 D=0
+[diag it 88] ply hist (upper-exclusive) 8:11 10:13 11:6 12:18 13:5 14:17 15:3 16:12 17:5 18:25 19:5 20:14 24:25 30:23 40:13 65:5
+[diag it 88] mcts depth avg=2.9 max=13 | leaves/search=1050.8 | nodes/search=1037.2 | terminal hits/game=7759.6 | batch mean=23.1
+[diag it 88] mcts root width=24.6/25 | visit entropy=3.09 bits | chosen prob=0.30 | net policy entropy=3.27 bits
+[diag it 88] net root value mean=0.01 |v|=0.69 |v|>0.9=41.3% | v*z align=0.52 | |v-z|=0.48
+[diag it 88] states/game=13232 | cross-game dup=25.4% | novel vs buffer=70.0% | buffer n=72503 distinct=84.2% dup=15.8%
+[diag it 88] buffer pi entropy=2.76 bits | one-hot=9.3% | pi max mass=0.49
+iter  88  loss 2.6107 (pol 2.180 val 0.430)  buffer 72503 (4000g)  arena 50W/50L/0D (0.50) 29ply/g  [623.9s]
+[diag it 89] plies avg=19.19 med=18 min=7 max=57 | W=142 B=58 D=0
+[diag it 89] ply hist (upper-exclusive) 8:11 9:1 10:17 11:3 12:18 13:2 14:19 15:8 16:12 17:3 18:6 19:11 20:11 24:25 30:21 40:24 65:8
+[diag it 89] mcts depth avg=3.1 max=14 | leaves/search=1057.1 | nodes/search=1045.5 | terminal hits/game=7774.3 | batch mean=23.2
+[diag it 89] mcts root width=24.6/25 | visit entropy=2.97 bits | chosen prob=0.33 | net policy entropy=3.13 bits
+[diag it 89] net root value mean=0.04 |v|=0.68 |v|>0.9=40.2% | v*z align=0.47 | |v-z|=0.53
+[diag it 89] states/game=13798 | cross-game dup=24.4% | novel vs buffer=72.2% | buffer n=72822 distinct=85.7% dup=14.3%
+[diag it 89] buffer pi entropy=2.78 bits | one-hot=10.1% | pi max mass=0.48
+iter  89  loss 2.6164 (pol 2.187 val 0.430)  buffer 72822 (4000g)  arena 0W/100L/0D (0.00) 39ply/g  [788.9s]
+[diag it 90] plies avg=19.55 med=18 min=7 max=56 | W=144 B=56 D=0
+[diag it 90] ply hist (upper-exclusive) 8:6 9:2 10:14 11:5 12:14 13:5 14:13 15:5 16:17 17:1 18:16 19:6 20:13 24:26 30:29 40:24 65:4
+[diag it 90] mcts depth avg=3.0 max=12 | leaves/search=1096.1 | nodes/search=1083.3 | terminal hits/game=7324.7 | batch mean=23.3
+[diag it 90] mcts root width=24.7/25 | visit entropy=3.00 bits | chosen prob=0.32 | net policy entropy=3.22 bits
+[diag it 90] net root value mean=-0.01 |v|=0.70 |v|>0.9=42.0% | v*z align=0.46 | |v-z|=0.54
+[diag it 90] states/game=14548 | cross-game dup=23.3% | novel vs buffer=71.1% | buffer n=73230 distinct=85.2% dup=14.8%
+[diag it 90] buffer pi entropy=2.75 bits | one-hot=8.2% | pi max mass=0.49
+iter  90  loss 2.6147 (pol 2.182 val 0.433)  buffer 73230 (4000g)  arena 100W/0L/0D (1.00) 27ply/g  BEST [645.1s]
+[diag it 91] plies avg=19.31 med=17 min=7 max=53 | W=136 B=64 D=0
+[diag it 91] ply hist (upper-exclusive) 8:13 9:2 10:12 11:6 12:14 13:4 14:17 15:11 16:10 17:8 18:15 19:6 20:10 24:24 30:15 40:21 65:12
+[diag it 91] mcts depth avg=3.0 max=13 | leaves/search=1062.8 | nodes/search=1058.1 | terminal hits/game=7732.8 | batch mean=23.1
+[diag it 91] mcts root width=24.6/25 | visit entropy=2.92 bits | chosen prob=0.34 | net policy entropy=3.07 bits
+[diag it 91] net root value mean=0.04 |v|=0.69 |v|>0.9=40.3% | v*z align=0.46 | |v-z|=0.54
+[diag it 91] states/game=13856 | cross-game dup=24.4% | novel vs buffer=72.7% | buffer n=73600 distinct=84.9% dup=15.2%
+[diag it 91] buffer pi entropy=2.75 bits | one-hot=8.3% | pi max mass=0.49
+iter  91  loss 2.6111 (pol 2.179 val 0.432)  buffer 73600 (4000g)  arena 50W/50L/0D (0.50) 39ply/g  [786.6s]
+[diag it 92] plies avg=17.66 med=15 min=7 max=51 | W=144 B=56 D=0
+[diag it 92] ply hist (upper-exclusive) 8:10 9:3 10:12 11:6 12:22 13:3 14:22 15:9 16:16 17:5 18:15 19:6 20:13 24:23 30:12 40:17 65:6
+[diag it 92] mcts depth avg=3.0 max=12 | leaves/search=1078.5 | nodes/search=1064.1 | terminal hits/game=6996.5 | batch mean=23.2
+[diag it 92] mcts root width=24.7/25 | visit entropy=2.90 bits | chosen prob=0.34 | net policy entropy=3.13 bits
+[diag it 92] net root value mean=-0.02 |v|=0.66 |v|>0.9=36.3% | v*z align=0.47 | |v-z|=0.53
+[diag it 92] states/game=12778 | cross-game dup=27.1% | novel vs buffer=68.5% | buffer n=73387 distinct=86.1% dup=13.9%
+[diag it 92] buffer pi entropy=2.75 bits | one-hot=10.2% | pi max mass=0.49
+iter  92  loss 2.6051 (pol 2.176 val 0.429)  buffer 73387 (4000g)  arena 0W/100L/0D (0.00) 27ply/g  [606.9s]
+[diag it 93] plies avg=18.87 med=17 min=7 max=51 | W=142 B=58 D=0
+[diag it 93] ply hist (upper-exclusive) 8:5 10:12 11:4 12:18 13:6 14:19 15:8 16:21 17:5 18:10 19:8 20:14 24:23 30:25 40:12 65:10
+[diag it 93] mcts depth avg=3.0 max=13 | leaves/search=1055.9 | nodes/search=1044.0 | terminal hits/game=7710.5 | batch mean=23.2
+[diag it 93] mcts root width=24.7/25 | visit entropy=3.00 bits | chosen prob=0.32 | net policy entropy=3.17 bits
+[diag it 93] net root value mean=0.05 |v|=0.67 |v|>0.9=39.3% | v*z align=0.47 | |v-z|=0.53
+[diag it 93] states/game=13449 | cross-game dup=25.9% | novel vs buffer=70.2% | buffer n=73676 distinct=85.9% dup=14.1%
+[diag it 93] buffer pi entropy=2.77 bits | one-hot=10.6% | pi max mass=0.48
+iter  93  loss 2.6064 (pol 2.179 val 0.427)  buffer 73676 (4000g)  arena 0W/100L/0D (0.00) 41ply/g  [788.3s]
+[diag it 94] plies avg=19.14 med=17 min=7 max=44 | W=152 B=48 D=0
+[diag it 94] ply hist (upper-exclusive) 8:6 9:2 10:12 11:3 12:17 13:4 14:23 15:4 16:11 17:4 18:19 19:7 20:14 24:25 30:16 40:28 65:5
+[diag it 94] mcts depth avg=3.0 max=14 | leaves/search=1077.1 | nodes/search=1064.7 | terminal hits/game=7350.2 | batch mean=23.1
+[diag it 94] mcts root width=24.7/25 | visit entropy=2.94 bits | chosen prob=0.34 | net policy entropy=3.10 bits
+[diag it 94] net root value mean=0.03 |v|=0.65 |v|>0.9=36.3% | v*z align=0.47 | |v-z|=0.53
+[diag it 94] states/game=13838 | cross-game dup=25.5% | novel vs buffer=69.2% | buffer n=73696 distinct=86.1% dup=13.9%
+[diag it 94] buffer pi entropy=2.80 bits | one-hot=9.8% | pi max mass=0.48
+iter  94  loss 2.6085 (pol 2.181 val 0.428)  buffer 73696 (4000g)  arena 0W/100L/0D (0.00) 30ply/g  [708.6s]
+[diag it 95] plies avg=18.73 med=17 min=7 max=52 | W=139 B=61 D=0
+[diag it 95] ply hist (upper-exclusive) 8:9 9:2 10:17 11:3 12:19 13:8 14:15 15:9 16:9 17:6 18:17 19:5 20:15 24:17 30:20 40:20 65:9
+[diag it 95] mcts depth avg=3.0 max=13 | leaves/search=1059.8 | nodes/search=1048.9 | terminal hits/game=7372.6 | batch mean=23.2
+[diag it 95] mcts root width=24.7/25 | visit entropy=2.97 bits | chosen prob=0.33 | net policy entropy=3.12 bits
+[diag it 95] net root value mean=0.08 |v|=0.68 |v|>0.9=40.5% | v*z align=0.45 | |v-z|=0.55
+[diag it 95] states/game=13622 | cross-game dup=25.2% | novel vs buffer=70.4% | buffer n=73745 distinct=85.1% dup=14.9%
+[diag it 95] buffer pi entropy=2.81 bits | one-hot=10.2% | pi max mass=0.48
+iter  95  loss 2.6070 (pol 2.177 val 0.430)  buffer 73745 (4000g)  arena 0W/100L/0D (0.00) 38ply/g  [784.7s]
+[diag it 96] plies avg=17.51 med=16 min=7 max=52 | W=144 B=56 D=0
+[diag it 96] ply hist (upper-exclusive) 8:8 9:3 10:15 11:4 12:20 13:6 14:20 15:7 16:16 17:5 18:14 19:6 20:17 24:25 30:15 40:15 65:4
+[diag it 96] mcts depth avg=2.9 max=13 | leaves/search=1034.2 | nodes/search=1020.1 | terminal hits/game=7746.8 | batch mean=23.1
+[diag it 96] mcts root width=24.6/25 | visit entropy=3.08 bits | chosen prob=0.30 | net policy entropy=3.23 bits
+[diag it 96] net root value mean=0.05 |v|=0.70 |v|>0.9=43.0% | v*z align=0.51 | |v-z|=0.49
+[diag it 96] states/game=12609 | cross-game dup=27.5% | novel vs buffer=68.3% | buffer n=73648 distinct=84.9% dup=15.1%
+[diag it 96] buffer pi entropy=2.84 bits | one-hot=8.2% | pi max mass=0.47
+iter  96  loss 2.6046 (pol 2.181 val 0.424)  buffer 73648 (4000g)  arena 64W/36L/0D (0.64) 26ply/g  BEST [624.4s]
+[diag it 97] plies avg=18.80 med=17 min=7 max=60 | W=144 B=56 D=0
+[diag it 97] ply hist (upper-exclusive) 8:7 10:15 11:2 12:17 13:5 14:16 15:4 16:20 17:11 18:20 19:9 20:7 24:19 30:20 40:24 65:4
+[diag it 97] mcts depth avg=3.0 max=13 | leaves/search=1067.9 | nodes/search=1061.1 | terminal hits/game=7471.6 | batch mean=23.1
+[diag it 97] mcts root width=24.7/25 | visit entropy=3.02 bits | chosen prob=0.32 | net policy entropy=3.17 bits
+[diag it 97] net root value mean=0.06 |v|=0.69 |v|>0.9=40.3% | v*z align=0.50 | |v-z|=0.50
+[diag it 97] states/game=13567 | cross-game dup=25.1% | novel vs buffer=70.0% | buffer n=73814 distinct=85.7% dup=14.3%
+[diag it 97] buffer pi entropy=2.80 bits | one-hot=10.8% | pi max mass=0.48
+iter  97  loss 2.6016 (pol 2.184 val 0.418)  buffer 73814 (4000g)  arena 54W/46L/0D (0.54) 21ply/g  [588.7s]
+[diag it 98] plies avg=18.64 med=17 min=7 max=61 | W=148 B=52 D=0
+[diag it 98] ply hist (upper-exclusive) 8:9 9:2 10:15 11:4 12:18 13:4 14:15 15:2 16:25 17:4 18:9 19:11 20:13 24:19 30:24 40:24 65:2
+[diag it 98] mcts depth avg=3.0 max=13 | leaves/search=1071.6 | nodes/search=1055.2 | terminal hits/game=7495.6 | batch mean=23.1
+[diag it 98] mcts root width=24.6/25 | visit entropy=2.99 bits | chosen prob=0.33 | net policy entropy=3.19 bits
+[diag it 98] net root value mean=-0.04 |v|=0.69 |v|>0.9=39.9% | v*z align=0.51 | |v-z|=0.49
+[diag it 98] states/game=13526 | cross-game dup=25.4% | novel vs buffer=69.3% | buffer n=73802 distinct=84.9% dup=15.1%
+[diag it 98] buffer pi entropy=2.80 bits | one-hot=9.6% | pi max mass=0.48
+iter  98  loss 2.5939 (pol 2.181 val 0.413)  buffer 73802 (4000g)  arena 42W/58L/0D (0.42) 21ply/g  [592.3s]
+[diag it 99] plies avg=18.62 med=17 min=7 max=47 | W=150 B=50 D=0
+[diag it 99] ply hist (upper-exclusive) 8:8 9:2 10:16 11:5 12:16 13:5 14:13 15:2 16:21 17:9 18:12 19:9 20:15 24:23 30:19 40:17 65:8
+[diag it 99] mcts depth avg=2.9 max=13 | leaves/search=1050.3 | nodes/search=1034.4 | terminal hits/game=7834.8 | batch mean=23.1
+[diag it 99] mcts root width=24.6/25 | visit entropy=3.04 bits | chosen prob=0.32 | net policy entropy=3.20 bits
+[diag it 99] net root value mean=0.03 |v|=0.71 |v|>0.9=42.3% | v*z align=0.52 | |v-z|=0.48
+[diag it 99] states/game=13390 | cross-game dup=25.2% | novel vs buffer=71.2% | buffer n=74079 distinct=85.4% dup=14.6%
+[diag it 99] buffer pi entropy=2.78 bits | one-hot=9.6% | pi max mass=0.49
+iter  99  loss 2.5865 (pol 2.179 val 0.408)  buffer 74079 (4000g)  arena 47W/53L/0D (0.47) 25ply/g  [622.0s]
+[diag it 100] plies avg=18.36 med=16 min=7 max=52 | W=142 B=58 D=0
+[diag it 100] ply hist (upper-exclusive) 8:7 9:3 10:22 11:3 12:14 13:6 14:17 15:7 16:21 17:5 18:12 19:5 20:13 24:26 30:9 40:24 65:6
+[diag it 100] mcts depth avg=2.9 max=13 | leaves/search=1054.4 | nodes/search=1036.2 | terminal hits/game=7691.1 | batch mean=23.1
+[diag it 100] mcts root width=24.6/25 | visit entropy=3.04 bits | chosen prob=0.32 | net policy entropy=3.19 bits
+[diag it 100] net root value mean=0.00 |v|=0.71 |v|>0.9=43.9% | v*z align=0.49 | |v-z|=0.51
+[diag it 100] states/game=13138 | cross-game dup=26.4% | novel vs buffer=69.0% | buffer n=73994 distinct=84.5% dup=15.5%
+[diag it 100] buffer pi entropy=2.86 bits | one-hot=8.5% | pi max mass=0.47
+iter 100  loss 2.5959 (pol 2.181 val 0.415)  buffer 73994 (4000g)  arena 36W/64L/0D (0.36) 20ply/g  [550.0s]
+Training complete: 100 iteration(s) in 65107.9s (651.1s/iter)
+Best model updated at iteration 96 -> checkpoints/best.pt
