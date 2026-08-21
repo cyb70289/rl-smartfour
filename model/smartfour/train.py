@@ -27,6 +27,7 @@ import multiprocessing
 import os
 import queue
 import signal
+import shutil
 import sys
 import tempfile
 import time
@@ -583,14 +584,21 @@ class Trainer:
 
     def save_best(self) -> None:
         """Slim best.pt for inference: the arena-best weights + iteration."""
+        best_path = self.checkpoint_dir / "best.pt"
         _atomic_save(
             {
                 "iteration": self.best_iteration,
                 "network": asdict(self.cfg.network),
                 "net_state": {k: v.cpu() for k, v in self.best_net.state_dict().items()},
             },
-            self.checkpoint_dir / "best.pt",
+            best_path,
         )
+        versions = []
+        for path in self.checkpoint_dir.glob("best*.pt"):
+            suffix = path.stem[4:]
+            if suffix.isdecimal():
+                versions.append(int(suffix))
+        shutil.copyfile(best_path, self.checkpoint_dir / f"best{max(versions, default=0) + 1}.pt")
 
     def _payload(self) -> dict:
         """Checkpoint payload with device-normalized (CPU) tensors, so a
