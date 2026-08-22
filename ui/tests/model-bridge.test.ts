@@ -1,8 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import type { Mock } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { createThinkHandler } from '../plugins/model-bridge';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createThinkHandler, listCheckpoints, CheckpointWorkerPool } from '../plugins/model-bridge';
 import type { ThinkHandlerDeps } from '../plugins/model-bridge';
+import type { PoolWorker } from '../plugins/model-bridge';
 import type { WorkerResponse } from '../plugins/worker-client';
 
 class FakeReq extends EventEmitter {
@@ -36,13 +40,17 @@ class FakeRes extends EventEmitter {
 }
 
 interface DepsOverrides {
-  ensureStarted?: () => Promise<void>;
-  request?: (state: unknown, simulations: number, signal?: AbortSignal) => Promise<WorkerResponse>;
+  ensureStarted?: (checkpoint: string) => Promise<void>;
+  request?: (state: unknown, simulations: number, checkpoint: string, signal?: AbortSignal) => Promise<WorkerResponse>;
 }
 
 function makeDeps(overrides: DepsOverrides = {}): { deps: ThinkHandlerDeps; ensureStarted: Mock; request: Mock } {
-  const ensureStarted = vi.fn(async () => {});
-  const request = vi.fn(async (_state: unknown, _simulations: number, _signal?: AbortSignal): Promise<WorkerResponse> => ({ move: { x: 1, z: 2 } }));
+  const ensureStarted = vi.fn(async (_checkpoint: string) => {});
+  const request = vi.fn(
+    async (_state: unknown, _simulations: number, _checkpoint: string, _signal?: AbortSignal): Promise<WorkerResponse> => ({
+      move: { x: 1, z: 2 },
+    }),
+  );
   return {
     deps: { ensureStarted, request, ...overrides },
     ensureStarted,
@@ -50,7 +58,7 @@ function makeDeps(overrides: DepsOverrides = {}): { deps: ThinkHandlerDeps; ensu
   };
 }
 
-const BODY = JSON.stringify({ state: { grid: [] }, simulations: 10 });
+const BODY = JSON.stringify({ state: { grid: [] }, simulations: 10, checkpoint: 'best.pt' });
 
 describe('createThinkHandler', () => {
   it('rejects non-POST requests with 405 and never touches the worker', async () => {
@@ -99,6 +107,43 @@ describe('createThinkHandler', () => {
     }
   });
 
+  it('defaults the checkpoint to best.pt when absent', async () => {
+    const { deps, ensureStarted, request } = makeDeps();
+    const handler = createThinkHandler(deps);
+    const req = new FakeReq();
+    const res = new FakeRes();
+    req.send(JSON.stringify({ state: { grid: [] }, simulations: 10 }));
+    await handler(req, res);
+    expect(ensureStarted).toHaveBeenCalledWith('best.pt');
+    expect(request).toHaveBeenCalledWith({ grid: [] }, 10, 'best.pt', expect.any(AbortSignal));
+  });
+
+  it('rejects a non-string checkpoint with 400 (null means default)', async () => {
+    for (const bad of [42, { name: 'best.pt' }]) {
+      const { deps, request } = makeDeps();
+      const handler = createThinkHandler(deps);
+      const req = new FakeReq();
+      const res = new FakeRes();
+      req.send(JSON.stringify({ state: {}, simulations: 10, checkpoint: bad }));
+      await handler(req, res);
+      expect(res.statusCode).toBe(400);
+      expect(request).not.toHaveBeenCalled();
+    }
+  });
+
+  it('rejects a checkpoint that is not a bare .pt name with 400 (path traversal guard)', async () => {
+    for (const bad of ['../best.pt', 'a/b.pt', 'best.pt.exe', 'best', '']) {
+      const { deps, request } = makeDeps();
+      const handler = createThinkHandler(deps);
+      const req = new FakeReq();
+      const res = new FakeRes();
+      req.send(JSON.stringify({ state: {}, simulations: 10, checkpoint: bad }));
+      await handler(req, res);
+      expect(res.statusCode).toBe(400);
+      expect(request).not.toHaveBeenCalled();
+    }
+  });
+
   it('returns 503 with the startup reason when the model cannot start', async () => {
     const { deps, request } = makeDeps({
       ensureStarted: () => Promise.reject(new Error('no checkpoint at /nope/best.pt')),
@@ -113,14 +158,14 @@ describe('createThinkHandler', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
-  it('forwards state and simulations and returns the move as 200', async () => {
+  it('forwards state, simulations and checkpoint and returns the move as 200', async () => {
     const { deps, request } = makeDeps();
     const handler = createThinkHandler(deps);
     const req = new FakeReq();
     const res = new FakeRes();
     req.send(BODY);
     await handler(req, res);
-    expect(request).toHaveBeenCalledWith({ grid: [] }, 10, expect.any(AbortSignal));
+    expect(request).toHaveBeenCalledWith({ grid: [] }, 10, 'best.pt', expect.any(AbortSignal));
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({ move: { x: 1, z: 2 } });
   });
@@ -166,7 +211,7 @@ describe('createThinkHandler', () => {
 
   it('aborts the in-flight request and writes nothing when the client disconnects', async () => {
     const requestStarted = Promise.withResolvers<void>();
-    const request = vi.fn((_state: unknown, _simulations: number, signal?: AbortSignal) => {
+    const request = vi.fn((_state: unknown, _simulations: number, _checkpoint: string, signal?: AbortSignal) => {
       requestStarted.resolve();
       const { promise, reject } = Promise.withResolvers<WorkerResponse>();
       signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
@@ -183,5 +228,124 @@ describe('createThinkHandler', () => {
     await done; // the handler settles without writing when the client is gone
     expect(res.writableEnded).toBe(false);
     expect(res.body).toBe('');
+  });
+});
+
+describe('listCheckpoints', () => {
+  let dir: string;
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('lists .pt files with best.pt first, the rest in natural order', () => {
+    dir = mkdtempSync(join(tmpdir(), 'sf-checkpoints-'));
+    for (const name of ['best2.pt', 'best.pt', 'random.pt', 'best1.pt', 'best10.pt']) {
+      writeFileSync(join(dir, name), 'x');
+    }
+    writeFileSync(join(dir, 'notes.txt'), 'x'); // not a checkpoint
+    writeFileSync(join(dir, 'best.pt.bak'), 'x'); // extension mismatch
+    mkdirSync(join(dir, 'fake.pt')); // a directory, not a file
+
+    expect(listCheckpoints(dir)).toEqual(['best.pt', 'best1.pt', 'best2.pt', 'best10.pt', 'random.pt']);
+  });
+
+  it('returns an empty list for a missing directory', () => {
+    expect(listCheckpoints(join(tmpdir(), 'sf-no-such-dir-xyz'))).toEqual([]);
+  });
+});
+
+describe('CheckpointWorkerPool', () => {
+  class FakeWorker implements PoolWorker {
+    alive = false;
+    started = false;
+    closed = false;
+    constructor(
+      public readonly checkpoint: string,
+      private failStart = false,
+    ) {}
+    async start(): Promise<void> {
+      if (this.failStart) throw new Error(`cannot load ${this.checkpoint}`);
+      this.started = true;
+      this.alive = true;
+    }
+    close(): void {
+      this.closed = true;
+      this.alive = false;
+    }
+    request(): Promise<WorkerResponse> {
+      return Promise.resolve({ move: { x: 1, z: 1 } });
+    }
+  }
+
+  function makePool(maxSize: number): {
+    pool: CheckpointWorkerPool;
+    made: FakeWorker[];
+    factory: (checkpoint: string) => FakeWorker;
+  } {
+    const made: FakeWorker[] = [];
+    const factory = (checkpoint: string): FakeWorker => {
+      const w = new FakeWorker(checkpoint);
+      made.push(w);
+      return w;
+    };
+    return { pool: new CheckpointWorkerPool(factory, maxSize), made, factory };
+  }
+
+  it('reuses a live worker for the same checkpoint', async () => {
+    const { pool, made } = makePool(2);
+    const a1 = await pool.ensure('a.pt');
+    const a2 = await pool.ensure('a.pt');
+    expect(a1).toBe(a2);
+    expect(made).toHaveLength(1);
+  });
+
+  it('evicts the least-recently-used worker when over the cap', async () => {
+    const { pool, made } = makePool(2);
+    await pool.ensure('a.pt');
+    await pool.ensure('b.pt');
+    await pool.ensure('c.pt');
+    expect(pool.size).toBe(2);
+    expect(made[0]!.closed).toBe(true); // a evicted
+    expect(made[1]!.closed).toBe(false);
+    expect(made[2]!.closed).toBe(false);
+    expect(pool.get('a.pt')).toBeNull();
+  });
+
+  it('touching a worker protects it from eviction', async () => {
+    const { pool, made } = makePool(2);
+    await pool.ensure('a.pt');
+    await pool.ensure('b.pt');
+    pool.get('a.pt'); // a is now MRU
+    await pool.ensure('c.pt');
+    expect(made[1]!.closed).toBe(true); // b evicted instead
+    expect(made[0]!.closed).toBe(false);
+    expect(made[2]!.closed).toBe(false);
+  });
+
+  it('recreates an evicted checkpoint on demand', async () => {
+    const { pool, made, factory } = makePool(2);
+    await pool.ensure('a.pt');
+    await pool.ensure('b.pt');
+    await pool.ensure('c.pt'); // evicts a
+    const a2 = await pool.ensure('a.pt');
+    expect(a2).toBe(made[3]!); // a new worker was spawned
+    expect(pool.size).toBe(2);
+  });
+
+  it('replaces a dead worker with a fresh one', async () => {
+    const { pool, made } = makePool(2);
+    const a = (await pool.ensure('a.pt')) as FakeWorker;
+    a.alive = false; // simulate worker death
+    const a2 = await pool.ensure('a.pt');
+    expect(a2).not.toBe(a);
+    expect(made).toHaveLength(2);
+  });
+
+  it('a failed start leaves no entry behind', async () => {
+    const failFactory = (checkpoint: string): FakeWorker => new FakeWorker(checkpoint, true);
+    const failing = new CheckpointWorkerPool(failFactory, 2);
+    await expect(failing.ensure('bad.pt')).rejects.toThrow('cannot load bad.pt');
+    expect(failing.size).toBe(0);
   });
 });

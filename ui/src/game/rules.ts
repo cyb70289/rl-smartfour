@@ -1,5 +1,5 @@
 import { BOARD_SIZE, STACK_HEIGHT, DEFAULT_PIECES, otherPlayer } from './types';
-import type { GameState, Mode, Move, Player, PlacedPiece, ThinkSettings, Winner } from './types';
+import type { GameState, Move, Player, PlayerSlot, PlacedPiece, ThinkSettings, Winner } from './types';
 
 export class IllegalMoveError extends Error {}
 
@@ -26,9 +26,9 @@ const DIRS: ReadonlyArray<readonly [number, number, number]> = [
 
 export function createInitialState(
   piecesPerPlayer: number = DEFAULT_PIECES,
-  mode: Mode = 'person',
-  humanColor: Player = 'white',
-  settings: ThinkSettings = { effort: 2000 },
+  white: PlayerSlot = { kind: 'human' },
+  black: PlayerSlot = { kind: 'human' },
+  settings: ThinkSettings = { effort: 500 },
 ): GameState {
   const grid: (Player | null)[][][] = [];
   for (let x = 0; x < BOARD_SIZE; x++) {
@@ -49,8 +49,9 @@ export function createInitialState(
     winningCells: null,
     revertAvailable: false,
     machineThinking: false,
-    mode,
-    humanColor,
+    autoplay: false,
+    white,
+    black,
     settings,
   };
 }

@@ -14,9 +14,18 @@ export interface PlacedPiece {
 
 export type Winner = Player | 'draw' | null;
 
-export type Mode = 'person' | 'machine';
+/** A player slot: a human, or the model loaded from a checkpoint file name. */
+export type PlayerSlot = { kind: 'human' } | { kind: 'model'; checkpoint: string };
 
-/** Machine search settings. `effort` = MCTS steps; 0 = policy only (no search). */
+/**
+ * Derived game mode:
+ * - `person` — both players human,
+ * - `machine` — one human, one model,
+ * - `autoplay` — two models (model-vs-model auto play).
+ */
+export type Mode = 'person' | 'machine' | 'autoplay';
+
+/** Model search settings. `effort` = MCTS steps; 0 = policy only (no search). */
 export interface ThinkSettings {
   effort: number;
 }
@@ -27,6 +36,25 @@ export const DEFAULT_PIECES = 32;
 
 export function otherPlayer(p: Player): Player {
   return p === 'white' ? 'black' : 'white';
+}
+
+/** The mode implied by the two player slots. */
+export function modeOf(white: PlayerSlot, black: PlayerSlot): Mode {
+  const whiteModel = white.kind === 'model';
+  const blackModel = black.kind === 'model';
+  return whiteModel && blackModel ? 'autoplay' : whiteModel || blackModel ? 'machine' : 'person';
+}
+
+/** True when `player` is played by a model in this game. */
+export function isModel(slots: { white: PlayerSlot; black: PlayerSlot }, player: Player): boolean {
+  return (player === 'white' ? slots.white : slots.black).kind === 'model';
+}
+
+/** The human player's color, or null in auto-play (both sides are models). */
+export function humanColorOf(slots: { white: PlayerSlot; black: PlayerSlot }): Player | null {
+  if (slots.white.kind === 'human') return 'white';
+  if (slots.black.kind === 'human') return 'black';
+  return null;
 }
 
 export interface GameState {
@@ -44,10 +72,13 @@ export interface GameState {
   winningCells: PlacedPiece[] | null;
   /** True right after a move; consumed by a revert. */
   revertAvailable: boolean;
-  /** True while a machine move is owed (machine mode only). */
+  /** True while a model move is owed (machine and autoplay modes). */
   machineThinking: boolean;
-  mode: Mode;
-  /** The human player's color; ignored in person mode. */
-  humanColor: Player;
+  /** True while model-vs-model auto play is running (autoplay mode only). */
+  autoplay: boolean;
+  /** The white player slot. */
+  white: PlayerSlot;
+  /** The black player slot. */
+  black: PlayerSlot;
   settings: ThinkSettings;
 }

@@ -23,19 +23,23 @@
         <section class="panel-section">
           <h2>Game setup <span class="hint">(takes effect immediately)</span></h2>
           <div class="field">
-            <span>Opponent</span>
-            <label class="radio-row"><input type="radio" name="mode" value="machine" checked /><span>Machine</span></label>
-            <label class="radio-row"><input type="radio" name="mode" value="person" /><span>Person</span></label>
+            <span>White player</span>
+            <label class="radio-row"><input type="radio" name="white-kind" value="human" checked /><span>Human</span></label>
+            <label class="radio-row"><input type="radio" name="white-kind" value="model" /><span>Model</span></label>
+            <select id="white-checkpoint" disabled></select>
           </div>
-          <div class="field" id="color-field">
-            <span>You play</span>
-            <label class="radio-row"><input type="radio" name="color" value="white" checked /><span>White (first)</span></label>
-            <label class="radio-row"><input type="radio" name="color" value="black" /><span>Black</span></label>
+          <div class="field">
+            <span>Black player</span>
+            <label class="radio-row"><input type="radio" name="black-kind" value="human" /><span>Human</span></label>
+            <label class="radio-row"><input type="radio" name="black-kind" value="model" checked /><span>Model</span></label>
+            <select id="black-checkpoint" disabled></select>
           </div>
-          <label class="field">
-            <span>Think effort <span id="effort-value">2000</span></span>
-            <input type="range" id="effort-range" min="0" max="2000" step="500" value="2000" />
-          </label>
+          <div class="field" id="effort-field">
+            <span>Think effort</span>
+            <label class="radio-row"><input type="radio" name="effort" value="0" /><span>Entry</span></label>
+            <label class="radio-row"><input type="radio" name="effort" value="500" checked /><span>Medium</span></label>
+            <label class="radio-row"><input type="radio" name="effort" value="2000" /><span>High</span></label>
+          </div>
         </section>
       </aside>
       <footer id="hintbar">Click a column to place a piece &middot; drag to rotate &middot; scroll to zoom</footer>

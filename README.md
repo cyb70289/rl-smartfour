@@ -52,9 +52,13 @@ npm run build
 npm run preview -- --host 0.0.0.0 --port 8032
 ```
 
-Play against the machine or a person on the same screen; you can revert moves
-(including finished games), pick your color, and adjust machine think effort
-(0 = policy only) — setup changes apply immediately.
+White and black players are independent slots, each human or a model
+(checkpoint dropdown, `best.pt` first). Both human = hot-seat play, one
+model = play against the machine (either color), both models = auto play
+with Play/Pause and Step controls (moves start at least 2s apart). Think
+effort is Entry/Medium/High (0 = policy only, default Medium, remembered
+across launches) — setup changes apply immediately, and you can revert moves
+(including finished games).
 
 ## CREDIT
 

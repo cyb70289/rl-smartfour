@@ -3,8 +3,9 @@ smart-four UI
 
 The web UI lives in `ui/` (TypeScript + Vite + Three.js, Vitest for tests).
 It renders a rotatable 3D board, enforces the game rules, and supports
-human-vs-human and human-vs-machine play. The machine player is the trained
-AlphaZero model (see `docs/model.md`), reached through a Vite bridge plugin.
+human-vs-human, human-vs-model and model-vs-model (auto play) games. Models
+are the trained AlphaZero checkpoints (see `docs/model.md`), reached through
+a Vite bridge plugin.
 
 What it provides
 ----------------
@@ -12,38 +13,61 @@ What it provides
   The default view frames the board in the upper part of the window; the last
   camera position/zoom/angle is remembered and restored on the next load.
 - Bucket-shaped pieces stacked bottom-up, white first; the top bar shows the
-  current player and the human's remaining pieces.
+  current player and their remaining pieces.
 - Last move highlighted; winning line highlighted with winner shown; draw
   shown when all 64 pieces are placed without a winner.
-- Revert one level: in person mode it undoes the last move; in machine mode
-  it undoes the machine and the last human move together so the human can
-  retry. The revert window is consumed by the revert (no double undo); a
+- Two independent player slots — **White player** and **Black player** — each
+  either *Human* or *Model* (radio). A model slot has a dropdown of every
+  `.pt` checkpoint in `model/checkpoints`, `best.pt` always first. Defaults:
+  white human, black model `best`. Any player-selection change restarts the
+  game immediately.
+- Game modes fall out of the slots:
+  - both human — classic hot-seat play;
+  - one model — play against the model (either color);
+  - both model — auto play: the **New Game** button becomes **Play/Pause** and
+    **Revert** becomes **Step**. Play starts/resumes the match (a finished
+    game restarts), Pause aborts the in-flight think, Step plays exactly one
+    move and pauses. Auto play moves start at least 2s apart; a think that
+    takes longer adds no extra delay.
+- Revert one level: in person mode it undoes the last move; with a model
+  involved it undoes the model and the last human move together so the human
+  can retry. The revert window is consumed by the revert (no double undo); a
   finished game can be reverted as well.
-- Person or machine mode (radio, applied immediately); machine color
-  selectable (radio, applied immediately); machine think effort (MCTS steps)
-  selectable in the UI — 0 = policy only — applied immediately; board input
-  is locked while the machine thinks.
+- Think effort selectable as three radios — Entry (0 = policy only), Medium
+  (500), High (2000), default Medium — applied immediately to every model
+  move; disabled when neither side is a model. The chosen effort is persisted
+  (`localStorage`) and restored on the next launch; player slots always reset
+  to their defaults.
 
 Architecture
 ------------
-- `src/main.ts` — composition root: creates the controller, scene and HUD,
-  subscribes the scene/HUD to controller state changes.
+- `src/main.ts` — composition root: loads the persisted effort, creates the
+  controller with per-slot model players, subscribes the scene/HUD to
+  controller state changes.
 - `src/game/` — framework-free game engine (no Three.js / DOM):
-  - `types.ts` — core types: Player, Move, PlacedPiece, GameState, ThinkSettings.
+  - `types.ts` — core types: Player, Move, PlacedPiece, PlayerSlot
+    (human | model + checkpoint), derived Mode (person/machine/autoplay),
+    GameState, ThinkSettings.
   - `rules.ts` — board construction, legality, applying moves, 3D win
     detection (all line geometries incl. stacks and rising diagonals), draw.
-  - `engine.ts` — pure reducer over GameState for human moves, machine moves,
-    revert and reset; enforces turn/thinking/game-over rules.
+  - `engine.ts` — pure reducer over GameState for human moves, model moves,
+    revert and reset; enforces turn/thinking/game-over rules; the thinking
+    flag stays set between auto play moves.
   - `machine.ts` — `MachinePlayer` interface, the `ModelMachinePlayer`
-    adapter (state JSON mapping, settings → simulations, legality check) and
-    the `RandomMachinePlayer` reference/test fixture.
-  - `controller.ts` — owns the live state, kicks off async machine thinks,
-    guards against stale results (generation counter + abort signal).
+    adapter (state JSON mapping, settings → simulations, checkpoint in the
+    request, legality check) and the `RandomMachinePlayer` reference/test
+    fixture.
+  - `controller.ts` — owns the live state, kicks off async model thinks for
+    the color that owes a move, guards against stale results (generation
+    counter + abort signal), and runs the auto play scheduler (2s minimum gap
+    between think starts, measured with an injectable clock).
 - `src/ui/` — rendering layer:
   - `scene.ts` — Three.js scene: board, pieces, last-move ring, win beam,
     hover ghost, stack-height-aware column picking, orbit camera.
-  - `src/ui/hud.ts` — top-bar status (with remaining pieces) and DOM side panel:
-    revert/new game buttons, mode/color/think-effort setup.
+  - `src/ui/hud.ts` — top-bar status (with remaining pieces) and DOM side
+    panel: action buttons (renamed per mode), white/black player rows with
+    checkpoint dropdowns, effort radios, effort persistence, checkpoint-list
+    loading.
 
 Design notes
 ------------
@@ -60,52 +84,60 @@ Design notes
   a stack never lands on a column behind it. Full columns have no target.
   Small targets keep far columns clickable through gaps between stacks
   (rotate if a real stack blocks the view).
-- Machine turns are asynchronous: while thinking, board clicks and revert are
-  disabled; starting a new game aborts the in-flight move.
+- Model turns are asynchronous: while thinking, board clicks and revert are
+  disabled; a new game (or Pause/Step) aborts the in-flight move.
 
 Machine integration
 -------------------
-The machine player is the trained AlphaZero model (`docs/model.md`) reached
-through a bridge:
+The model players are the trained AlphaZero checkpoints (`docs/model.md`)
+reached through a bridge:
 
     browser (src/game/machine.ts — ModelMachinePlayer)
-       │  POST /api/think  {"state": <state_to_json>, "simulations": n}
+       │  POST /api/think  {"state": <state_to_json>, "simulations": n, "checkpoint": "best.pt"}
        ▼
     vite dev/preview server (plugins/model-bridge.ts)
-       │  spawns once and drives a persistent Python worker
+       │  per-checkpoint worker cache (LRU, max 2), routes by checkpoint
        ▼
     model/smartfour/worker.py → SmartFourAgent.choose_move
 
+    browser (src/ui/hud.ts)
+       │  GET /api/checkpoints  →  {"checkpoints": ["best.pt", "best1.pt", ...]}
+       ▼
+    vite dev/preview server → lists model/checkpoints/*.pt, best first
+
 Where things live
 - `src/game/machine.ts` — `ModelMachinePlayer` implements `MachinePlayer`
-  and is wired up in `src/main.ts`. It converts the state to the model's
-  JSON contract (`stateToJson`: grid colors 0/1/null, `pieces_left`,
-  `current`, `winner`), maps settings to MCTS steps (`simulationsOf`:
-  effort < 1 → 0 = policy-only, else `floor(effort)`), passes
-  the abort signal to `fetch` (aborts reject promptly) and validates the
-  returned move against the snapshot before resolving. `RandomMachinePlayer`
-  remains as a reference/test fixture.
-- `plugins/model-bridge.ts` — Vite plugin serving `POST /api/think` on both
-  dev and preview servers; spawns the worker eagerly, restarts it on demand
-  after a failure, kills it with the server.
+  and is wired up in `src/main.ts` (one instance per model slot). It converts
+  the state to the model's JSON contract (`stateToJson`: grid colors 0/1/null,
+  `pieces_left`, `current`, `winner`), maps settings to MCTS steps
+  (`simulationsOf`: effort < 1 → 0 = policy-only, else `floor(effort)`),
+  sends the checkpoint name, passes the abort signal to `fetch` (aborts
+  reject promptly) and validates the returned move against the snapshot
+  before resolving. `RandomMachinePlayer` remains as a reference/test fixture.
+- `plugins/model-bridge.ts` — Vite plugin serving `POST /api/think` and
+  `GET /api/checkpoints` on both dev and preview servers. `CheckpointWorkerPool`
+  caches workers per checkpoint (LRU, default max 2 — one per player slot);
+  the default checkpoint worker (`best.pt`) is started eagerly, workers are
+  restarted on demand after a failure, and all are killed with the server.
 - `plugins/worker-client.ts` — process client: requests are strictly
-  serialized and matched by id; an aborted request's late response is
-  discarded; protocol violations or worker death fail in-flight requests.
+  serialized per worker and matched by id; an aborted request's late response
+  is discarded; protocol violations or worker death fail in-flight requests.
 - `model/smartfour/worker.py` — persistent newline-JSON worker: loads the
   checkpoint once, prints a ready line, then answers one request per line
   (errors in-band, loop keeps serving).
 
 Behavior
-- The model is expected to be present: if the worker cannot start (missing
-  venv/checkpoint), the failure is logged loudly and every think returns 503
-  with the reason, shown in the UI banner. Machine play refuses until the
-  model is available — there is no silent fallback.
-- Override the worker paths with `SMARTFOUR_PYTHON` / `SMARTFOUR_CHECKPOINT`.
-- The controller catches illegal machine moves, reports them via `onError`
+- Checkpoints are expected to be present: if a worker cannot start (missing
+  venv/checkpoint), the failure is logged loudly and every think for that
+  checkpoint returns 503 with the reason, shown in the UI banner. Model play
+  refuses until the model is available — there is no silent fallback.
+- Override the interpreter path with `SMARTFOUR_PYTHON`. The old
+  `SMARTFOUR_CHECKPOINT` override is gone: checkpoints are chosen in the UI.
+- The controller catches illegal model moves, reports them via `onError`
   and releases the `machineThinking` lock, so a broken checkpoint can never
   wedge the UI.
-- `/api/think` is served by Vite only (dev/preview); serving `dist/` with a
-  plain static file server loses it.
+- `/api/think` and `/api/checkpoints` are served by Vite only (dev/preview);
+  serving `dist/` with a plain static file server loses them.
 
 Commands
 --------

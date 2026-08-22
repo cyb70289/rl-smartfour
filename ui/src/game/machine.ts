@@ -72,9 +72,15 @@ export function simulationsOf(settings: ThinkSettings): number {
  * checkpoint can never wedge the controller.
  */
 export class ModelMachinePlayer implements MachinePlayer {
-  readonly name = 'model';
+  readonly name: string;
 
-  constructor(private endpoint = '/api/think') {}
+  constructor(
+    /** Checkpoint file name under model/checkpoints, e.g. "best.pt". */
+    readonly checkpoint: string,
+    private endpoint = '/api/think',
+  ) {
+    this.name = `model:${checkpoint}`;
+  }
 
   async think(state: Readonly<GameState>, settings: ThinkSettings, signal?: AbortSignal): Promise<Move> {
     if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
@@ -83,7 +89,11 @@ export class ModelMachinePlayer implements MachinePlayer {
       res = await fetch(this.endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ state: stateToJson(state), simulations: simulationsOf(settings) }),
+        body: JSON.stringify({
+          state: stateToJson(state),
+          simulations: simulationsOf(settings),
+          checkpoint: this.checkpoint,
+        }),
         signal,
       });
     } catch (err) {

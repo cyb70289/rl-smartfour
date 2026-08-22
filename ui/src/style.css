@@ -119,7 +119,16 @@ button.primary:hover:not(:disabled) { background: #275f7a; }
   margin-bottom: 10px;
   color: var(--muted);
 }
-.field input[type="range"] { width: 100%; }
+.field select {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #262a35;
+  color: var(--text);
+  font-size: 13px;
+  accent-color: var(--accent);
+}
+.field select:disabled { opacity: 0.4; cursor: not-allowed; }
 .radio-row {
   display: flex;
   align-items: center;
