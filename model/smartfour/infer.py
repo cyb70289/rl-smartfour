@@ -10,7 +10,7 @@ interchange format (see game.state_to_json / state_from_json):
       "winner": null | "white" | "black" | "draw"
     }
 
-CLI:  python -m smartfour.infer --checkpoint checkpoints/best.pt --sims 200 --state state.json
+CLI:  python -m smartfour.infer --checkpoint checkpoints/best{n}.pt --sims 200 --state state.json
 Prints the chosen move as {"x": .., "z": ..} (or {"move": null} when terminal).
 """
 

@@ -1,7 +1,7 @@
 """Probe a trained model's tactical competence (defense/attack awareness).
 
 Usage:
-  .venv/bin/python tools/probe.py --checkpoint checkpoints/best.pt --sims 200
+  .venv/bin/python tools/probe.py --checkpoint checkpoints/best{n}.pt --sims 200
 
 Builds synthetic REACHABLE positions where the player to move has an
 immediate win (win-in-1) and where the opponent threatens to complete a

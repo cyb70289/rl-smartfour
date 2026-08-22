@@ -42,6 +42,7 @@ class FakeRes extends EventEmitter {
 interface DepsOverrides {
   ensureStarted?: (checkpoint: string) => Promise<void>;
   request?: (state: unknown, simulations: number, checkpoint: string, signal?: AbortSignal) => Promise<WorkerResponse>;
+  defaultCheckpoint?: () => string | undefined;
 }
 
 function makeDeps(overrides: DepsOverrides = {}): { deps: ThinkHandlerDeps; ensureStarted: Mock; request: Mock } {
@@ -58,7 +59,7 @@ function makeDeps(overrides: DepsOverrides = {}): { deps: ThinkHandlerDeps; ensu
   };
 }
 
-const BODY = JSON.stringify({ state: { grid: [] }, simulations: 10, checkpoint: 'best.pt' });
+const BODY = JSON.stringify({ state: { grid: [] }, simulations: 10, checkpoint: 'best1.pt' });
 
 describe('createThinkHandler', () => {
   it('rejects non-POST requests with 405 and never touches the worker', async () => {
@@ -107,18 +108,42 @@ describe('createThinkHandler', () => {
     }
   });
 
-  it('defaults the checkpoint to best.pt when absent', async () => {
-    const { deps, ensureStarted, request } = makeDeps();
+  it('defaults the checkpoint to the biggest best{n}.pt when absent', async () => {
+    const { deps, ensureStarted, request } = makeDeps({ defaultCheckpoint: () => 'best7.pt' });
     const handler = createThinkHandler(deps);
     const req = new FakeReq();
     const res = new FakeRes();
     req.send(JSON.stringify({ state: { grid: [] }, simulations: 10 }));
     await handler(req, res);
-    expect(ensureStarted).toHaveBeenCalledWith('best.pt');
-    expect(request).toHaveBeenCalledWith({ grid: [] }, 10, 'best.pt', expect.any(AbortSignal));
+    expect(ensureStarted).toHaveBeenCalledWith('best7.pt');
+    expect(request).toHaveBeenCalledWith({ grid: [] }, 10, 'best7.pt', expect.any(AbortSignal));
   });
 
-  it('rejects a non-string checkpoint with 400 (null means default)', async () => {
+  it('treats null and an empty string as the default checkpoint', async () => {
+    for (const missing of [null, '']) {
+      const { deps, request } = makeDeps({ defaultCheckpoint: () => 'best7.pt' });
+      const handler = createThinkHandler(deps);
+      const req = new FakeReq();
+      const res = new FakeRes();
+      req.send(JSON.stringify({ state: {}, simulations: 10, checkpoint: missing }));
+      await handler(req, res);
+      expect(request).toHaveBeenCalledWith({}, 10, 'best7.pt', expect.any(AbortSignal));
+    }
+  });
+
+  it('returns 503 when no default checkpoint exists', async () => {
+    const { deps, request } = makeDeps({ defaultCheckpoint: () => undefined });
+    const handler = createThinkHandler(deps);
+    const req = new FakeReq();
+    const res = new FakeRes();
+    req.send(JSON.stringify({ state: { grid: [] }, simulations: 10 }));
+    await handler(req, res);
+    expect(res.statusCode).toBe(503);
+    expect(JSON.parse(res.body)).toEqual({ error: 'model unavailable: no best{n}.pt checkpoints' });
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-string checkpoint with 400 (null and empty string mean default)', async () => {
     for (const bad of [42, { name: 'best.pt' }]) {
       const { deps, request } = makeDeps();
       const handler = createThinkHandler(deps);
@@ -132,7 +157,7 @@ describe('createThinkHandler', () => {
   });
 
   it('rejects a checkpoint that is not a bare .pt name with 400 (path traversal guard)', async () => {
-    for (const bad of ['../best.pt', 'a/b.pt', 'best.pt.exe', 'best', '']) {
+    for (const bad of ['../best.pt', 'a/b.pt', 'best.pt.exe', 'best']) {
       const { deps, request } = makeDeps();
       const handler = createThinkHandler(deps);
       const req = new FakeReq();
@@ -165,7 +190,7 @@ describe('createThinkHandler', () => {
     const res = new FakeRes();
     req.send(BODY);
     await handler(req, res);
-    expect(request).toHaveBeenCalledWith({ grid: [] }, 10, 'best.pt', expect.any(AbortSignal));
+    expect(request).toHaveBeenCalledWith({ grid: [] }, 10, 'best1.pt', expect.any(AbortSignal));
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({ move: { x: 1, z: 2 } });
   });
@@ -238,16 +263,23 @@ describe('listCheckpoints', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('lists .pt files with best.pt first, the rest in natural order', () => {
+  it('lists best{n}.pt files in descending n, ignoring everything else', () => {
     dir = mkdtempSync(join(tmpdir(), 'sf-checkpoints-'));
-    for (const name of ['best2.pt', 'best.pt', 'random.pt', 'best1.pt', 'best10.pt']) {
+    for (const name of ['best2.pt', 'best.pt', 'random.pt', 'best1.pt', 'best10.pt', 'best0.pt']) {
       writeFileSync(join(dir, name), 'x');
     }
     writeFileSync(join(dir, 'notes.txt'), 'x'); // not a checkpoint
     writeFileSync(join(dir, 'best.pt.bak'), 'x'); // extension mismatch
     mkdirSync(join(dir, 'fake.pt')); // a directory, not a file
 
-    expect(listCheckpoints(dir)).toEqual(['best.pt', 'best1.pt', 'best2.pt', 'best10.pt', 'random.pt']);
+    expect(listCheckpoints(dir)).toEqual(['best10.pt', 'best2.pt', 'best1.pt', 'best0.pt']);
+  });
+
+  it('returns an empty list when only best.pt or unrelated files exist', () => {
+    dir = mkdtempSync(join(tmpdir(), 'sf-checkpoints-'));
+    writeFileSync(join(dir, 'best.pt'), 'x');
+    writeFileSync(join(dir, 'random.pt'), 'x');
+    expect(listCheckpoints(dir)).toEqual([]);
   });
 
   it('returns an empty list for a missing directory', () => {

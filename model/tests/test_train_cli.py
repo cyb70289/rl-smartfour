@@ -130,8 +130,9 @@ def test_cli_fresh_start_without_checkpoint(tmp_path, stub_train, capsys):
 
 
 def test_cli_never_resumes_from_best(tmp_path, stub_train, capsys):
+    """best{n}.pt are inference snapshots, never resume anchors."""
     cfg = write_config(tmp_path)
-    seed_checkpoint(cfg, iteration=9, name="best.pt")
+    seed_checkpoint(cfg, iteration=9, name="best1.pt")
     main(["--config", str(cfg), "--iterations", "4"])
     out = capsys.readouterr().out
     assert "No checkpoint found; starting fresh" in out

@@ -19,6 +19,8 @@ export interface ModelBridgeOptions {
 export interface ThinkHandlerDeps {
   ensureStarted(checkpoint: string): Promise<void>;
   request(state: unknown, simulations: number, checkpoint: string, signal?: AbortSignal): Promise<WorkerResponse>;
+  /** The default checkpoint when the request omits one: the biggest best{n}.pt. */
+  defaultCheckpoint?(): string | undefined;
 }
 
 /** The parts of http.IncomingMessage the handler needs (structural, testable). */
@@ -46,6 +48,14 @@ const CHECKPOINTS_DIR = fileURLToPath(new URL('../../model/checkpoints', import.
  * so resolving against CHECKPOINTS_DIR can never escape it. */
 const CHECKPOINT_RE = /^[\w.-]+\.pt$/;
 
+/** A versioned best checkpoint: best{n}.pt (the only files listed). */
+const BEST_RE = /^best(\d+)\.pt$/;
+
+/** Numerical version n of a best{n}.pt file name, or -1 when not one. */
+function bestVersion(name: string): number {
+  return Number(BEST_RE.exec(name)?.[1] ?? -1);
+}
+
 /** Absolute path of a checkpoint file inside the checkpoints dir. */
 function checkpointPath(name: string): string {
   if (!CHECKPOINT_RE.test(name)) throw new Error(`invalid checkpoint name: ${name}`);
@@ -53,20 +63,18 @@ function checkpointPath(name: string): string {
 }
 
 /**
- * Lists the checkpoints dir: all .pt files, `best.pt` always first, the rest
- * in natural order. Empty on read errors (missing dir, permission).
+ * Lists the checkpoints dir: every best{n}.pt file, biggest n first (largest
+ * n = strongest model). Plain best.pt, other .pt files and directories are
+ * ignored. Empty on read errors (missing dir, permission).
  */
 export function listCheckpoints(dir: string = CHECKPOINTS_DIR): string[] {
   let names: string[];
   try {
-    names = readdirSync(dir).filter((n) => CHECKPOINT_RE.test(n) && statSync(join(dir, n)).isFile());
+    names = readdirSync(dir).filter((n) => BEST_RE.test(n) && statSync(join(dir, n)).isFile());
   } catch {
     return [];
   }
-  const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
-  const best = names.filter((n) => n === 'best.pt');
-  const rest = names.filter((n) => n !== 'best.pt').sort(collator.compare);
-  return [...best, ...rest];
+  return names.sort((a, b) => bestVersion(b) - bestVersion(a));
 }
 
 /** The worker surface the pool needs (WorkerClient satisfies it). */
@@ -153,7 +161,7 @@ export class CheckpointWorkerPool {
 
 /**
  * POST /api/think middleware. Body: {"state": <state_to_json>, "simulations": n,
- * "checkpoint": <file name, optional, default "best.pt">}.
+ * "checkpoint": <file name, optional, default the biggest best{n}.pt>}.
  * Response: 200 {"move": {"x","z"}} | {"move": null}, 400 bad body, 500 worker
  * error, 502 worker failure, 503 model unavailable. Aborting the request
  * (client disconnect) aborts the in-flight worker request; the late response
@@ -192,10 +200,20 @@ async function handleBody(body: string, res: ThinkResponse, deps: ThinkHandlerDe
     return;
   }
   const checkpoint = 'checkpoint' in payload ? payload.checkpoint : undefined;
-  const checkpointName = checkpoint ?? 'best.pt';
-  if (typeof checkpointName !== 'string' || !CHECKPOINT_RE.test(checkpointName)) {
-    sendJson(res, 400, { error: `'checkpoint' must be a .pt file name, got ${JSON.stringify(checkpointName)}` });
+  let checkpointName: string;
+  if (checkpoint === undefined || checkpoint === null || checkpoint === '') {
+    // Unspecified checkpoint: default to the biggest best{n}.pt.
+    const fallback = (deps.defaultCheckpoint ?? defaultCheckpoint)();
+    if (fallback === undefined) {
+      sendJson(res, 503, { error: 'model unavailable: no best{n}.pt checkpoints' });
+      return;
+    }
+    checkpointName = fallback;
+  } else if (typeof checkpoint !== 'string' || !CHECKPOINT_RE.test(checkpoint)) {
+    sendJson(res, 400, { error: `'checkpoint' must be a .pt file name, got ${JSON.stringify(checkpoint)}` });
     return;
+  } else {
+    checkpointName = checkpoint;
   }
   const state = payload.state;
 
@@ -236,6 +254,11 @@ function readBody(req: ThinkRequest): Promise<string> {
   return promise;
 }
 
+/** The default checkpoint: the biggest best{n}.pt in the checkpoints dir. */
+function defaultCheckpoint(): string | undefined {
+  return listCheckpoints()[0];
+}
+
 function sendJson(res: ThinkResponse, status: number, payload: unknown): void {
   if (res.writableEnded) return;
   res.statusCode = status;
@@ -251,12 +274,13 @@ function messageOf(err: unknown): string {
  * Serves the model on the dev and preview servers:
  * - `POST /api/think` — model moves, routed to the worker of the requested
  *   checkpoint; workers are cached per checkpoint (LRU, max 2).
- * - `GET /api/checkpoints` — the list of .pt files in model/checkpoints,
- *   `best.pt` first.
- * The default checkpoint worker (best.pt) is started eagerly; if it cannot
- * start (missing venv/checkpoint), the failure is logged loudly and every
- * think returns 503 — model play refuses until the model is available, with
- * a retry on each request. Override the interpreter with SMARTFOUR_PYTHON.
+ * - `GET /api/checkpoints` — the list of best{n}.pt files in
+ *   model/checkpoints, biggest n first.
+ * The default checkpoint worker (the biggest best{n}.pt) is started
+ * eagerly; if it cannot start (missing venv/checkpoint), the failure is
+ * logged loudly and every think returns 503 — model play refuses until the
+ * model is available, with a retry on each request. Override the
+ * interpreter with SMARTFOUR_PYTHON.
  */
 export function modelBridge(options: ModelBridgeOptions = {}): Plugin {
   const python = process.env.SMARTFOUR_PYTHON ?? options.python ?? DEFAULT_PYTHON;
@@ -294,7 +318,13 @@ export function modelBridge(options: ModelBridgeOptions = {}): Plugin {
   };
 
   const startEager = (): void => {
-    ensureStarted('best.pt').catch((err: unknown) => {
+    const first = listCheckpoints()[0];
+    if (first === undefined) {
+      console.error('[smartfour] no best{n}.pt checkpoints found in model/checkpoints;');
+      console.error('[smartfour] model play returns HTTP 503 until a best{n}.pt checkpoint is added.');
+      return;
+    }
+    ensureStarted(first).catch((err: unknown) => {
       console.error(`[smartfour] model unavailable: ${messageOf(err)}`);
       console.error('[smartfour] model play returns HTTP 503 until the model starts. Set SMARTFOUR_PYTHON to override the default interpreter path.');
     });

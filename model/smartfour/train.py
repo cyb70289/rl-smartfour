@@ -5,8 +5,9 @@ Checkpoints (checkpoint_dir/):
                only per-iteration checkpoint; written atomically after every
                completed iteration, so it always holds the last completed
                iteration.
-  best.pt      slim inference snapshot of the arena-best net (weights +
-               iteration the best was set). Never used for resume.
+  best{n}.pt   slim inference snapshot of the arena-best net (weights +
+               iteration the best was set); one per arena promotion, bigger
+               n = stronger. Never used for resume.
 All writes are atomic (temp file + os.replace), so an interrupt or crash
 mid-save never corrupts an existing checkpoint. Older versions also wrote
 iter_NNNN.pt snapshots per iteration; those are no longer created, and stale
@@ -27,7 +28,6 @@ import multiprocessing
 import os
 import queue
 import signal
-import shutil
 import sys
 import tempfile
 import time
@@ -39,6 +39,7 @@ import torch
 from tqdm import tqdm
 
 from .arena import arena_worker, play_arena
+from .checkpoints import best_versions, latest_best
 from .diagnostics import aggregate_games, buffer_stats, format_lines
 from .device import resolve_device, VALID_DEVICES
 from .config import Config, load_config
@@ -583,22 +584,22 @@ class Trainer:
         _atomic_save(self._payload(), path)
 
     def save_best(self) -> None:
-        """Slim best.pt for inference: the arena-best weights + iteration."""
-        best_path = self.checkpoint_dir / "best.pt"
+        """Slim best{n}.pt for inference: the arena-best weights + iteration.
+
+        Each promotion writes a new version (n = previous max + 1), so the
+        biggest n is always the strongest model; plain best.pt is neither
+        produced nor read.
+        """
+        versions = best_versions(self.checkpoint_dir)
+        next_version = (versions[-1] if versions else 0) + 1
         _atomic_save(
             {
                 "iteration": self.best_iteration,
                 "network": asdict(self.cfg.network),
                 "net_state": {k: v.cpu() for k, v in self.best_net.state_dict().items()},
             },
-            best_path,
+            self.checkpoint_dir / f"best{next_version}.pt",
         )
-        versions = []
-        for path in self.checkpoint_dir.glob("best*.pt"):
-            suffix = path.stem[4:]
-            if suffix.isdecimal():
-                versions.append(int(suffix))
-        shutil.copyfile(best_path, self.checkpoint_dir / f"best{max(versions, default=0) + 1}.pt")
 
     def _payload(self) -> dict:
         """Checkpoint payload with device-normalized (CPU) tensors, so a
@@ -867,13 +868,14 @@ def main(argv=None) -> None:
 
     best_iter = max((s["iteration"] for s in stats if s["improved"]), default=None)
     n = max(1, len(stats))
+    latest = latest_best(trainer.checkpoint_dir)
+    latest_label = str(latest) if latest else "no best{n}.pt yet"
     print(f"\nTraining complete: {len(stats)} iteration(s) in {total:.1f}s"
           f" ({total / n:.1f}s/iter)")
     if best_iter:
-        print(f"Best model updated at iteration {best_iter} ->"
-              f" {trainer.checkpoint_dir}/best.pt")
+        print(f"Best model updated at iteration {best_iter} -> {latest_label}")
     else:
-        print(f"Best model unchanged -> {trainer.checkpoint_dir}/best.pt")
+        print(f"Best model unchanged -> {latest_label}")
 
 
 if __name__ == "__main__":

@@ -32,6 +32,8 @@ export class Hud {
   private errorText = '';
   private checkpoints: string[] = [];
   private mode: Mode = 'person';
+  /** True once the user changed any player slot; disables the default-switch. */
+  private userTouched = false;
 
   constructor(root: HTMLElement, private cb: HudCallbacks) {
     this.statusEl = byId(root, 'status');
@@ -63,11 +65,15 @@ export class Hud {
     const wireSlot = (radios: NodeListOf<HTMLInputElement>, select: HTMLSelectElement): void => {
       radios.forEach((r) =>
         r.addEventListener('change', () => {
+          this.userTouched = true;
           this.refreshSetup();
           this.cb.onNewGame(this.pendingConfig());
         }),
       );
-      select.addEventListener('change', () => this.cb.onNewGame(this.pendingConfig()));
+      select.addEventListener('change', () => {
+        this.userTouched = true;
+        this.cb.onNewGame(this.pendingConfig());
+      });
     };
     wireSlot(this.whiteKindRadios, this.whiteSelect);
     wireSlot(this.blackKindRadios, this.blackSelect);
@@ -150,11 +156,18 @@ export class Hud {
         this.checkpoints = body.checkpoints.filter((n): n is string => typeof n === 'string');
       }
     } catch {
-      // The dropdowns stay empty/disabled; model play still attempts best.pt.
+      // The dropdowns stay empty/disabled; model play still falls back to the
+      // server's default checkpoint (the biggest best{n}.pt) via an empty name.
     }
     this.populateSelect(this.whiteSelect);
     this.populateSelect(this.blackSelect);
     this.refreshSetup();
+    // The boot config starts before the list arrives; if the user has not
+    // touched the panel, restart with the real default (biggest best{n}.pt)
+    // so the running game matches the dropdown.
+    if (!this.userTouched && this.checkpoints.length > 0) {
+      this.cb.onNewGame(this.pendingConfig());
+    }
   }
 
   private populateSelect(sel: HTMLSelectElement): void {
@@ -186,8 +199,10 @@ export class Hud {
   }
 
   private slotOf(kindRadios: NodeListOf<HTMLInputElement>, select: HTMLSelectElement): PlayerSlot {
+    // An empty selection (no checkpoints listed) sends '' so the bridge falls
+    // back to its default; without any checkpoint that is a 503, never a move.
     return this.selectedValue(kindRadios) === 'model'
-      ? { kind: 'model', checkpoint: select.value || 'best.pt' }
+      ? { kind: 'model', checkpoint: select.value || '' }
       : { kind: 'human' };
   }
 

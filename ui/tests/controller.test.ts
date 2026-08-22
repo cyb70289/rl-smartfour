@@ -7,9 +7,9 @@ import type { GameConfig } from '../src/game/engine';
 import type { GameState, Move, ThinkSettings } from '../src/game/types';
 
 const person: GameConfig = { white: { kind: 'human' }, black: { kind: 'human' }, settings: { effort: 100 } };
-const machineHumanWhite: GameConfig = { white: { kind: 'human' }, black: { kind: 'model', checkpoint: 'best.pt' }, settings: { effort: 100 } };
-const machineHumanBlack: GameConfig = { white: { kind: 'model', checkpoint: 'best.pt' }, black: { kind: 'human' }, settings: { effort: 100 } };
-const autoplay: GameConfig = { white: { kind: 'model', checkpoint: 'best.pt' }, black: { kind: 'model', checkpoint: 'best1.pt' }, settings: { effort: 100 } };
+const machineHumanWhite: GameConfig = { white: { kind: 'human' }, black: { kind: 'model', checkpoint: 'best1.pt' }, settings: { effort: 100 } };
+const machineHumanBlack: GameConfig = { white: { kind: 'model', checkpoint: 'best1.pt' }, black: { kind: 'human' }, settings: { effort: 100 } };
+const autoplay: GameConfig = { white: { kind: 'model', checkpoint: 'best1.pt' }, black: { kind: 'model', checkpoint: 'best2.pt' }, settings: { effort: 100 } };
 
 /** Fake machine with manually controlled promise resolution. */
 class FakeMachine {

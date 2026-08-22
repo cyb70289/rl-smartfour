@@ -227,7 +227,7 @@ def test_checkpoint_round_trip(tmp_path):
 
 
 def test_save_best_writes_slim_snapshot(tmp_path):
-    """best.pt is an inference snapshot (best weights + iteration), not a
+    """best{n}.pt is an inference snapshot (best weights + iteration), not a
     training state: no buffer, no optimizer."""
     cfg = make_config(tmp_path)
     t = Trainer(cfg)
@@ -237,16 +237,31 @@ def test_save_best_writes_slim_snapshot(tmp_path):
         for p in t.best_net.parameters():
             p.add_(1.0)  # best differs from the current net
     t.save_best()
-    payload = torch.load(tmp_path / "best.pt", weights_only=False)
+    payload = torch.load(tmp_path / "best1.pt", weights_only=False)
     assert payload["iteration"] == 4
     assert "net_state" in payload
     assert "buffer" not in payload
     assert "optimizer_state" not in payload
-    # best.pt carries the best net's weights, not the current net's.
+    # best{n}.pt carries the best net's weights, not the current net's.
     t2 = Trainer(cfg)
     t2.best_net.load_state_dict(payload["net_state"])
     for p1, p2 in zip(t.best_net.parameters(), t2.best_net.parameters()):
         assert torch.equal(p1, p2)
+
+
+def test_save_best_versions_increment(tmp_path):
+    """Each promotion writes a new best{n}.pt; plain best.pt is never made."""
+    cfg = make_config(tmp_path)
+    t = Trainer(cfg)
+    t.best_iteration = 1
+    t.save_best()
+    t.best_iteration = 2
+    t.save_best()
+    assert (tmp_path / "best1.pt").exists()
+    assert (tmp_path / "best2.pt").exists()
+    assert not (tmp_path / "best.pt").exists()
+    payload = torch.load(tmp_path / "best2.pt", weights_only=False)
+    assert payload["iteration"] == 2
 
 
 # ---------------------------------------------------------------- best-model selection
@@ -260,10 +275,10 @@ def test_best_replaced_only_above_ratio(tmp_path, monkeypatch):
 
     monkeypatch.setattr(t, "_arena", fake_arena)
     t._maybe_update_best(1)
-    assert (tmp_path / "best.pt").exists()
+    assert (tmp_path / "best1.pt").exists()
     assert t.best_iteration == 1
-    # best.pt holds the candidate's weights (the net that won the arena).
-    payload = torch.load(tmp_path / "best.pt", weights_only=False)
+    # best{n}.pt holds the candidate's weights (the net that won the arena).
+    payload = torch.load(tmp_path / "best1.pt", weights_only=False)
     t2 = Trainer(cfg)
     t2.best_net.load_state_dict(payload["net_state"])
     for p1, p2 in zip(t.net.parameters(), t2.best_net.parameters()):
@@ -283,7 +298,7 @@ def test_best_not_replaced_when_losing(tmp_path, monkeypatch):
     monkeypatch.setattr(t, "_arena", fake_arena)
     t._maybe_update_best(1)
     # Candidate lost: no best checkpoint is written (nothing improved yet).
-    assert not (tmp_path / "best.pt").exists()
+    assert not (tmp_path / "best1.pt").exists()
     assert t.best_iteration == 0
 
 
@@ -298,7 +313,7 @@ def test_best_replaced_with_draws_scored_half(tmp_path, monkeypatch):
 
     monkeypatch.setattr(t, "_arena", fake_arena)
     t._maybe_update_best(1)
-    assert (tmp_path / "best.pt").exists()
+    assert (tmp_path / "best1.pt").exists()
     assert t.best_iteration == 1
 
 
@@ -312,7 +327,7 @@ def test_best_not_replaced_when_draws_dilute_below_ratio(tmp_path, monkeypatch):
 
     monkeypatch.setattr(t, "_arena", fake_arena)
     t._maybe_update_best(1)
-    assert (tmp_path / "best.pt").exists()
+    assert (tmp_path / "best1.pt").exists()
 
     def fake_arena_short(net_a, net_b, games):
         return (11, 8, 11, 0)  # ratio = (11 + 5.5) / 30 = 0.55 -> promotes (>=)

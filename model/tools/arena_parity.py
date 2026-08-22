@@ -1,6 +1,7 @@
 """Arena parity: virtual-loss batched searcher vs sequential searcher.
 
-Same net (checkpoints/best.pt), same sims (400), alternating colors.
+Same net (the biggest checkpoints/best{n}.pt), same sims (400), alternating
+colors.
 Batched runs with batch_eval_size=128 (the UI default). Pass criterion:
 batched win ratio >= 0.45 in net_a's frame (counted for the batched side).
 """
@@ -12,6 +13,7 @@ sys.path.insert(0, ".")
 import torch
 
 from smartfour.arena import _result_in_a_frame
+from smartfour.checkpoints import latest_best
 from smartfour.config import MCTSConfig
 from smartfour.encode import action_to_xyz
 from smartfour.game import BLACK, DRAW, WHITE, apply_move, initial_state, is_terminal
@@ -21,12 +23,16 @@ from smartfour.network import ResNet
 SIMS = 400
 BES = 128
 GAMES = 100
-NET = "checkpoints/best.pt"
+NET = latest_best("checkpoints")
+if NET is None:
+    sys.exit("no best{n}.pt checkpoint found under checkpoints/")
+NET = str(NET)
 
 
 def load_net():
     payload = torch.load(NET, weights_only=True)
     from smartfour.config import NetworkConfig
+
     net = ResNet(NetworkConfig(**payload["network"]))
     net.load_state_dict(payload["net_state"])
     net.eval()

@@ -24,7 +24,9 @@ function loadEffort(): number {
 }
 
 const DEFAULT_WHITE: PlayerSlot = { kind: 'human' };
-const DEFAULT_BLACK: PlayerSlot = { kind: 'model', checkpoint: 'best.pt' };
+// Placeholder until the checkpoint list loads: the bridge falls back to the
+// biggest best{n}.pt, and loadCheckpoints restarts with it when untouched.
+const DEFAULT_BLACK: PlayerSlot = { kind: 'model', checkpoint: '' };
 
 /** The model player per slot; null = human. */
 function playersOf(config: GameConfig): { white: ModelMachinePlayer | null; black: ModelMachinePlayer | null } {

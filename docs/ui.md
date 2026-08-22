@@ -18,9 +18,10 @@ What it provides
   shown when all 64 pieces are placed without a winner.
 - Two independent player slots — **White player** and **Black player** — each
   either *Human* or *Model* (radio). A model slot has a dropdown of every
-  `.pt` checkpoint in `model/checkpoints`, `best.pt` always first. Defaults:
-  white human, black model `best`. Any player-selection change restarts the
-  game immediately.
+  `best{n}.pt` checkpoint in `model/checkpoints` (largest n = strongest,
+  listed largest first, and that largest one is selected by default).
+  Defaults: white human, black model. Any player-selection change restarts
+  the game immediately.
 - Game modes fall out of the slots:
   - both human — classic hot-seat play;
   - one model — play against the model (either color);
@@ -93,7 +94,7 @@ The model players are the trained AlphaZero checkpoints (`docs/model.md`)
 reached through a bridge:
 
     browser (src/game/machine.ts — ModelMachinePlayer)
-       │  POST /api/think  {"state": <state_to_json>, "simulations": n, "checkpoint": "best.pt"}
+       │  POST /api/think  {"state": <state_to_json>, "simulations": n, "checkpoint": "best3.pt"}
        ▼
     vite dev/preview server (plugins/model-bridge.ts)
        │  per-checkpoint worker cache (LRU, max 2), routes by checkpoint
@@ -101,9 +102,9 @@ reached through a bridge:
     model/smartfour/worker.py → SmartFourAgent.choose_move
 
     browser (src/ui/hud.ts)
-       │  GET /api/checkpoints  →  {"checkpoints": ["best.pt", "best1.pt", ...]}
+       │  GET /api/checkpoints  →  {"checkpoints": ["best3.pt", "best2.pt", "best1.pt"]}
        ▼
-    vite dev/preview server → lists model/checkpoints/*.pt, best first
+    vite dev/preview server → lists model/checkpoints/best{n}.pt, biggest n first
 
 Where things live
 - `src/game/machine.ts` — `ModelMachinePlayer` implements `MachinePlayer`
@@ -117,7 +118,7 @@ Where things live
 - `plugins/model-bridge.ts` — Vite plugin serving `POST /api/think` and
   `GET /api/checkpoints` on both dev and preview servers. `CheckpointWorkerPool`
   caches workers per checkpoint (LRU, default max 2 — one per player slot);
-  the default checkpoint worker (`best.pt`) is started eagerly, workers are
+  the default checkpoint worker (biggest `best{n}.pt`) is started eagerly, workers are
   restarted on demand after a failure, and all are killed with the server.
 - `plugins/worker-client.ts` — process client: requests are strictly
   serialized per worker and matched by id; an aborted request's late response

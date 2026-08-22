@@ -12,7 +12,7 @@ A single {"ready": true, ...} line is printed once the checkpoint is loaded so
 the bridge can wait for readiness before sending requests. `simulations=0`
 means policy-only (no MCTS search), matching `SmartFourAgent.choose_move`.
 
-CLI:  python -m smartfour.worker --checkpoint checkpoints/best.pt
+CLI:  python -m smartfour.worker --checkpoint checkpoints/best{n}.pt
 """
 
 import argparse

@@ -6,9 +6,9 @@ import type { GameState } from '../src/game/types';
 import { modeOf, humanColorOf } from '../src/game/types';
 
 const person: GameConfig = { white: { kind: 'human' }, black: { kind: 'human' }, settings: { effort: 100 } };
-const machineHumanWhite: GameConfig = { white: { kind: 'human' }, black: { kind: 'model', checkpoint: 'best.pt' }, settings: { effort: 100 } };
-const machineHumanBlack: GameConfig = { white: { kind: 'model', checkpoint: 'best.pt' }, black: { kind: 'human' }, settings: { effort: 100 } };
-const autoplay: GameConfig = { white: { kind: 'model', checkpoint: 'best.pt' }, black: { kind: 'model', checkpoint: 'best1.pt' }, settings: { effort: 100 } };
+const machineHumanWhite: GameConfig = { white: { kind: 'human' }, black: { kind: 'model', checkpoint: 'best1.pt' }, settings: { effort: 100 } };
+const machineHumanBlack: GameConfig = { white: { kind: 'model', checkpoint: 'best1.pt' }, black: { kind: 'human' }, settings: { effort: 100 } };
+const autoplay: GameConfig = { white: { kind: 'model', checkpoint: 'best1.pt' }, black: { kind: 'model', checkpoint: 'best2.pt' }, settings: { effort: 100 } };
 
 /** Helper: apply a plain move (person mode, or human move in machine mode). */
 function mv(s: GameState, x: number, z: number): GameState {

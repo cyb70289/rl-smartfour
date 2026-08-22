@@ -12,13 +12,17 @@ sys.path.insert(0, ".")
 
 import torch
 
+from smartfour.checkpoints import latest_best
 from smartfour.config import MCTSConfig, NetworkConfig
 from smartfour.encode import action_to_xyz
 from smartfour.game import apply_move, initial_state, is_terminal, legal_moves
 from smartfour.mcts import MCTS
 from smartfour.network import ResNet
 
-CKPT = "checkpoints/best.pt"
+CKPT = latest_best("checkpoints")
+if CKPT is None:
+    sys.exit("no best{n}.pt checkpoint found under checkpoints/")
+CKPT = str(CKPT)
 
 
 def load_net(device):

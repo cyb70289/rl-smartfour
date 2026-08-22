@@ -29,7 +29,7 @@ requesting an unavailable device is a hard error, never a silent fallback.
   workers are connected.
 
 The optimization phase runs on the selected device (batches are copied per
-step; the replay buffer stays on CPU). Checkpoints (`latest.pt`, `best.pt`)
+step; the replay buffer stays on CPU). Checkpoints (`latest.pt`, `best{n}.pt`)
 normalize every tensor to CPU on save, so a checkpoint written on mps/cuda
 resumes or serves on any device. Inference (`smartfour.infer`, the UI
 worker) stays CPU-only by design.
@@ -168,7 +168,7 @@ and prints a `[diag it N]` block. Key fields (see
 
 Tactical probes (`tools/probe.py`)
 ---------------------------------
-`tools/probe.py --checkpoint checkpoints/best.pt --sims 200` tests a
+`tools/probe.py --checkpoint checkpoints/best{n}.pt --sims 200` tests a
 checkpoint on reachable synthetic positions: immediate wins, one-ply blocks,
 and 4-ply fork positions (prevent/execute), plus a vs-random win rate.
 Checkpoints live in `checkpoint_dir` (`checkpoints/`):
@@ -178,8 +178,10 @@ Checkpoints live in `checkpoint_dir` (`checkpoints/`):
   iteration, so it always holds the last completed one; an interrupt or
   crash discards the in-flight iteration and never touches it. Resume loads
   this file or starts fresh.
-- `best.pt` — slim inference snapshot of the arena-best net (weights + the
-  iteration it won). The UI loads this. Never used for resume.
+- `best{n}.pt` — slim inference snapshot of the arena-best net (weights + the
+  iteration it won), one per arena promotion; the biggest n is the strongest
+  model. The UI lists these (biggest first) and defaults to the biggest.
+  Never used for resume.
 
 Parallel self-play and arena
 ----------------------------
@@ -238,7 +240,7 @@ cd model
 .venv/bin/python -m smartfour.train --config config.toml --restart --yes
                                             # wipe checkpoints/ (confirmation prompt
                                             # without --yes) and start from iteration 1
-.venv/bin/python -m smartfour.infer --checkpoint checkpoints/best.pt --sims 200 --state state.json
+.venv/bin/python -m smartfour.infer --checkpoint checkpoints/best{n}.pt --sims 200 --state state.json
 
 # per-phase benchmarks (net throughput, self-play, optimize, arena)
 .venv/bin/python tools/bench.py --config config.toml --device mps

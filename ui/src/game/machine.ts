@@ -75,7 +75,7 @@ export class ModelMachinePlayer implements MachinePlayer {
   readonly name: string;
 
   constructor(
-    /** Checkpoint file name under model/checkpoints, e.g. "best.pt". */
+    /** Checkpoint file name under model/checkpoints, e.g. "best3.pt". */
     readonly checkpoint: string,
     private endpoint = '/api/think',
   ) {

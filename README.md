@@ -41,9 +41,10 @@ python3 -m venv .venv
 See [`docs/ui.md`](docs/ui.md) for design principals.
 
 The machine player is the trained model checkpoint. Train the model
-by yourself or download `best.pt` from the
+by yourself or download `best{n}.pt` from the
 [releases page](https://github.com/cyb70289/rl-smartfour/releases) and
-save it as `model/checkpoints/best.pt`, then build and serve:
+save it as `model/checkpoints/best{n}.pt` (larger n = stronger model),
+then build and serve:
 
 ```sh
 cd ui
@@ -53,7 +54,7 @@ npm run preview -- --host 0.0.0.0 --port 8032
 ```
 
 White and black players are independent slots, each human or a model
-(checkpoint dropdown, `best.pt` first). Both human = hot-seat play, one
+(checkpoint dropdown of `best{n}.pt`, largest n first). Both human = hot-seat play, one
 model = play against the machine (either color), both models = auto play
 with Play/Pause and Step controls (moves start at least 2s apart). Think
 effort is Entry/Medium/High (0 = policy only, default Medium, remembered
