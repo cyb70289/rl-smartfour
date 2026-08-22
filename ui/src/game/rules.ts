@@ -49,6 +49,7 @@ export function createInitialState(
     winningCells: null,
     revertAvailable: false,
     machineThinking: false,
+    thinking: false,
     autoplay: false,
     white,
     black,

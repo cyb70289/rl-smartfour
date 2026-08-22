@@ -39,6 +39,7 @@ describe('engine: modes and player slots', () => {
     expect(modeOf(s.white, s.black)).toBe('person');
     expect(humanColorOf(s)).toBe('white');
     expect(s.machineThinking).toBe(false);
+    expect(s.thinking).toBe(false);
     expect(s.winner).toBeNull();
   });
 

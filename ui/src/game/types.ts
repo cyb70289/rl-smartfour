@@ -74,6 +74,9 @@ export interface GameState {
   revertAvailable: boolean;
   /** True while a model move is owed (machine and autoplay modes). */
   machineThinking: boolean;
+  /** True while a model think is actually in flight; an owed move that has
+   * not started (paused auto play, the between-move gap) stays false. */
+  thinking: boolean;
   /** True while model-vs-model auto play is running (autoplay mode only). */
   autoplay: boolean;
   /** The white player slot. */

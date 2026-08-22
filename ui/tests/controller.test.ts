@@ -63,12 +63,14 @@ describe('GameController: machine turn orchestration', () => {
 
     ctrl.humanMove({ x: 2, z: 2 });
     expect(ctrl.state.machineThinking).toBe(true);
+    expect(ctrl.state.thinking).toBe(true); // think in flight
     expect(machine.calls).toHaveLength(1);
     expect(machine.calls[0]!.state.current).toBe('black');
 
     machine.resolveNext({ x: 0, z: 0 });
-    await settle();
+    await flush();
     expect(ctrl.state.machineThinking).toBe(false);
+    expect(ctrl.state.thinking).toBe(false);
     expect(ctrl.state.history).toEqual([
       { x: 2, z: 2, player: 'white' },
       { x: 0, z: 0, player: 'black' },
@@ -196,11 +198,12 @@ describe('GameController: machine turn orchestration', () => {
     const machine = new FakeMachine();
     const ctrl = new GameController({ white: null, black: machine }, machineHumanWhite, () => {});
     const seen: string[] = [];
-    ctrl.subscribe(() => seen.push(`${ctrl.state.history.length}`));
+    ctrl.subscribe(() => seen.push(`${ctrl.state.history.length}:${ctrl.state.thinking}`));
     ctrl.humanMove({ x: 2, z: 2 });
-    expect(seen).toEqual(['1']);
+    // Two transitions: the move lands, then the think is flagged in flight.
+    expect(seen).toEqual(['1:false', '1:true']);
     machine.resolveNext({ x: 0, z: 0 });
-    return flush().then(() => expect(seen).toEqual(['1', '2']));
+    return flush().then(() => expect(seen).toEqual(['1:false', '1:true', '2:false']));
   });
 
   it('reverting a finished machine game re-kicks the machine when it owes a move', async () => {
@@ -328,6 +331,7 @@ describe('GameController: auto play (model vs model)', () => {
     const { ctrl, white } = makeCtrl();
     expect(ctrl.state.autoplay).toBe(false);
     expect(ctrl.state.machineThinking).toBe(true); // white owes a move
+    expect(ctrl.state.thinking).toBe(false); // nothing in flight while paused
     expect(white.calls).toHaveLength(0);
   });
 
@@ -335,6 +339,7 @@ describe('GameController: auto play (model vs model)', () => {
     const { ctrl, white, black } = makeCtrl();
     ctrl.play();
     expect(ctrl.state.autoplay).toBe(true);
+    expect(ctrl.state.thinking).toBe(true); // first think in flight
     expect(white.calls).toHaveLength(1);
 
     white.resolveNext({ x: 0, z: 0 });
@@ -342,6 +347,8 @@ describe('GameController: auto play (model vs model)', () => {
     expect(ctrl.state.history).toHaveLength(1);
     expect(ctrl.state.current).toBe('black');
     expect(ctrl.state.machineThinking).toBe(true); // black owes a move
+    // Zero-gap loop: black's think already started, so it is in flight.
+    expect(ctrl.state.thinking).toBe(true);
     expect(black.calls).toHaveLength(1);
 
     black.resolveNext({ x: 4, z: 4 });
@@ -378,6 +385,7 @@ describe('GameController: auto play (model vs model)', () => {
     expect(signal?.aborted).toBe(true);
     expect(ctrl.state.autoplay).toBe(false);
     expect(ctrl.state.machineThinking).toBe(false);
+    expect(ctrl.state.thinking).toBe(false);
 
     // The stale think resolving must not move the board or start the loop.
     white.resolveNext({ x: 0, z: 0 });
@@ -409,6 +417,8 @@ describe('GameController: auto play (model vs model)', () => {
     const { ctrl, white, black } = makeCtrl();
     ctrl.step();
     expect(ctrl.state.autoplay).toBe(false);
+    expect(ctrl.state.machineThinking).toBe(true); // white owes a move
+    expect(ctrl.state.thinking).toBe(true); // step think in flight
     expect(white.calls).toHaveLength(1);
 
     white.resolveNext({ x: 0, z: 0 });
@@ -416,6 +426,7 @@ describe('GameController: auto play (model vs model)', () => {
     expect(ctrl.state.history).toHaveLength(1);
     expect(black.calls).toHaveLength(0); // no auto continuation
     expect(ctrl.state.machineThinking).toBe(true); // black still owes a move
+    expect(ctrl.state.thinking).toBe(false); // paused again, nothing in flight
   });
 
   it('Step also pauses an auto-playing game and plays a single move', async () => {

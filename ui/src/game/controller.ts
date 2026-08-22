@@ -29,6 +29,9 @@ export interface ControllerOptions {
  *   whenever the state owes one (machine and autoplay modes),
  * - guards against stale model results (generation counter incremented on
  *   every reset/abort, plus an AbortSignal for the in-flight think),
+ * - exposes `thinking` through the state while a think is actually in
+ *   flight (distinct from `machineThinking`, which also covers owed moves
+ *   that have not started: paused auto play, the between-move gap),
  * - runs the model-vs-model auto play loop: after a move lands, the next
  *   think starts no sooner than 2s after the previous one started; if the
  *   think itself took longer, no extra delay is added.
@@ -104,7 +107,7 @@ export class GameController {
     if (modeOf(this.state.white, this.state.black) !== 'autoplay') return;
     if (!this.state.autoplay && !this.state.machineThinking) return;
     this.abortInFlight();
-    this.setState({ ...this.state, autoplay: false, machineThinking: false });
+    this.setState({ ...this.state, autoplay: false, machineThinking: false, thinking: false });
   }
 
   /**
@@ -173,7 +176,7 @@ export class GameController {
     if (!machine) {
       // machineThinking implies the current side is a model; a missing
       // player means the controller was wired wrong — fail loudly.
-      this.setState({ ...this.state, machineThinking: false, autoplay: false });
+      this.setState({ ...this.state, machineThinking: false, autoplay: false, thinking: false });
       this.onError?.(new Error('no model player for the current side'));
       return;
     }
@@ -182,26 +185,29 @@ export class GameController {
     this.abortCtrl = ac;
     this.thinkStart = this.now();
     const snapshot = this.state;
+    this.setState({ ...snapshot, thinking: true });
     machine.think(snapshot, snapshot.settings, ac.signal).then(
       (move) => {
         if (gen !== this.generation) return;
         if (this.state.machineThinking && this.state.winner === null) {
           try {
-            this.setState(reduce(this.state, { type: 'machine-move', move }));
+            this.setState({ ...reduce(this.state, { type: 'machine-move', move }), thinking: false });
           } catch (err) {
             // A broken model (e.g. a bad checkpoint returning an illegal
             // move) must surface as an error and release the lock, not throw
             // out of the promise chain and wedge the UI.
-            this.setState({ ...this.state, machineThinking: false, autoplay: false });
+            this.setState({ ...this.state, machineThinking: false, autoplay: false, thinking: false });
             this.onError?.(err);
             return;
           }
           this.scheduleAutoplay();
+        } else {
+          this.setState({ ...this.state, thinking: false });
         }
       },
       (err) => {
         if (gen !== this.generation) return;
-        this.setState({ ...this.state, machineThinking: false, autoplay: false });
+        this.setState({ ...this.state, machineThinking: false, autoplay: false, thinking: false });
         this.onError?.(err);
       },
     );

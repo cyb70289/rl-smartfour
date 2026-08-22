@@ -92,13 +92,9 @@ export class Hud {
     // auto play, where there is no human).
     let text: string;
     let cls = '';
-    if (state.machineThinking) {
-      if (this.mode === 'autoplay' && !state.autoplay) {
-        text = `${cap(state.current)} to move`; // paused: a move is owed but not in flight
-      } else {
-        text = this.mode === 'autoplay' ? `${cap(state.current)} is thinking…` : 'Machine is thinking…';
-        cls = 'thinking';
-      }
+    if (state.machineThinking && state.thinking) {
+      text = this.mode === 'autoplay' ? `${cap(state.current)} is thinking…` : 'Machine is thinking…';
+      cls = 'thinking';
     } else if (state.winner === 'white') {
       text = 'White wins!';
       cls = 'win-white';
