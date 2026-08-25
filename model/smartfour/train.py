@@ -41,6 +41,7 @@ from tqdm import tqdm
 from .arena import arena_worker, play_arena
 from .checkpoints import best_versions, latest_best
 from .diagnostics import aggregate_games, buffer_stats, format_lines
+from .openbook import game_plans, load_book
 from .device import resolve_device, VALID_DEVICES
 from .config import Config, load_config
 from .encode import apply_d4, apply_d4_policy, d4_perms
@@ -304,6 +305,11 @@ class Trainer:
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         self._buf_hashes: set = set()  # tensor hashes of states pushed this run
         self.server = None          # InferenceServerHandle when accelerator-backed
+        self.book = load_book()
+        print(
+            f"opening book: {len(self.book)} states"
+            + ("" if self.book else " (absent — arena plays from the initial board)")
+        )
 
     # ------------------------------------------------------------- internals
 
@@ -464,26 +470,30 @@ class Trainer:
             sum(vals) / len(vals) if vals else float("nan"),
         )
 
-    def _arena(self, net_a, net_b, games: int):
+    def _arena(self, net_a, net_b, games: int, seed: int):
         workers = self.cfg.training.workers
         if workers <= 1:
             with _tqdm(total=games, desc="arena", unit="game", leave=False) as bar:
                 plies_out = []
+                skipped_out = []
                 w, l, d = play_arena(
                     net_a, net_b, self.cfg.mcts, games,
                     progress=bar.update, plies_out=plies_out,
+                    book=self.book, seed=seed, skipped_out=skipped_out,
                 )
-                return w, l, d, sum(plies_out)
+                return w, l, d, sum(plies_out), sum(skipped_out)
         with _tqdm(total=games, desc="arena", unit="game", leave=False) as bar:
-            return self._arena_parallel(net_a, net_b, games, workers, bar)
+            return self._arena_parallel(net_a, net_b, games, workers, bar, seed)
 
-    def _arena_parallel(self, net_a, net_b, games: int, workers: int, bar):
+    def _arena_parallel(self, net_a, net_b, games: int, workers: int, bar,
+                        seed: int):
         """Spawn one process per worker; each plays its share of games with
         fresh copies of both nets and ships per-game results over a queue.
         Fails fast if any worker errors or dies before delivering its games.
         Workers are daemonic (a dying parent cannot orphan them) and ignore
         SIGINT (the parent alone decides when to stop).
         """
+        plans = game_plans(len(self.book), games, seed)
         ctx = multiprocessing.get_context("spawn")
         out_q = ctx.Queue()
         net_a_state = {k: v.cpu() for k, v in net_a.state_dict().items()}
@@ -501,6 +511,7 @@ class Trainer:
                         net_a_state, net_b_state, self.cfg.network, self.cfg.mcts,
                         n, start, self.cfg.training.seed + i + 1, num_threads, out_q,
                         self.server.address if self.server else None,
+                        self.book, plans[start:start + n],
                     ),
                     daemon=True,
                 )
@@ -517,10 +528,12 @@ class Trainer:
         Raises RuntimeError when a worker reports failure or dies early, so a
         broken worker can never silently shrink the arena; surviving workers
         are terminated before the error propagates. Results arrive in net_a's
-        frame, so counting is the same as a sequential run.
+        frame as (result, played plies, skipped book plies), so counting is
+        the same as a sequential run.
         """
         a_wins = b_wins = draws = 0
         plies = 0
+        skipped = 0
         received = 0
         try:
             while received < games:
@@ -533,12 +546,16 @@ class Trainer:
                         )
                     continue
                 if (
-                    isinstance(msg, tuple) and len(msg) == 2
+                    isinstance(msg, tuple) and len(msg) >= 2
                     and msg[0] == "__worker_error__"
                 ):
                     raise RuntimeError(f"arena worker failed: {msg[1]}")
-                if isinstance(msg, tuple) and len(msg) == 2:
-                    result, game_plies = msg
+                if isinstance(msg, tuple) and len(msg) == 3:
+                    result, game_plies, game_skipped = msg
+                    plies += game_plies
+                    skipped += game_skipped
+                elif isinstance(msg, tuple) and len(msg) == 2:
+                    result, game_plies = msg  # legacy message without skips
                     plies += game_plies
                 else:
                     result = msg  # legacy plain-result message
@@ -554,11 +571,14 @@ class Trainer:
             _terminate_workers(procs)
             raise
         self._finish_workers(procs, "arena")
-        return a_wins, b_wins, draws, plies
+        return a_wins, b_wins, draws, plies, skipped
 
     def _maybe_update_best(self, current_iteration: int) -> dict:
         games = self.cfg.training.eval_games
-        wins, losses, draws, plies = self._arena(self.net, self.best_net, games)
+        wins, losses, draws, raw_plies, played_plies = self._arena(
+            self.net, self.best_net, games,
+            seed=self.cfg.training.seed + current_iteration,
+        )
         total = wins + losses + draws
         # Draws count as half a win so a drawish but stronger candidate can
         # still clear the threshold instead of being drowned in the denominator.
@@ -573,7 +593,8 @@ class Trainer:
             "arena_losses": losses,
             "arena_draws": draws,
             "arena_ratio": ratio,
-            "arena_plies": plies,
+            "arena_plies": raw_plies,
+            "arena_plies_played": played_plies,
             "improved": improved,
         }
 
@@ -731,14 +752,14 @@ class Trainer:
                     stats.append(self.train_iteration())
                     s = stats[-1]
                     s["elapsed"] = time.perf_counter() - t0
+                    n_arena = max(1, s["arena_wins"] + s["arena_losses"] + s["arena_draws"])
                     bar.update(1)
                     tqdm.write(
-                        f"iter {s['iteration']:3d}  loss {s['loss_mean']:.4f}"
-                        f" (pol {s['policy_loss']:.3f} val {s['value_loss']:.3f})  "
                         f"buffer {s['buffer_size']} ({s['buffer_games']}g)  "
                         f"arena {s['arena_wins']}W/{s['arena_losses']}L/{s['arena_draws']}D"
                         f" ({s['arena_ratio']:.2f}) "
-                        f"{s['arena_plies'] // max(1, s['arena_wins'] + s['arena_losses'] + s['arena_draws'])}ply/g  "
+                        f"{s['arena_plies'] // n_arena}ply/g"
+                        f" ({s['arena_plies_played'] // n_arena} played)  "
                         f"{'BEST ' if s['improved'] else ''}"
                         f"[{s['elapsed']:.1f}s]"
                     )

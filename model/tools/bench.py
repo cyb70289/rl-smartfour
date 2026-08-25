@@ -254,9 +254,9 @@ def _bench_arena_worker(net_a_state, net_b_state, net_cfg, mcts_cfg, games,
         for j in range(games):
             a_is_white = (start + j) % 2 == 0
             if a_is_white:
-                _r, p = _play_two(net_a, net_b, mcts_cfg, ev_a, ev_b)
+                _r, p, _skipped = _play_two(net_a, net_b, mcts_cfg, ev_a, ev_b)
             else:
-                _r, p = _play_two(net_b, net_a, mcts_cfg, ev_b, ev_a)
+                _r, p, _skipped = _play_two(net_b, net_a, mcts_cfg, ev_b, ev_a)
             plies += p
         out_q.put(("ok", plies, time.perf_counter() - t0))
     except Exception as exc:  # noqa: BLE001

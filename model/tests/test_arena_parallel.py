@@ -95,13 +95,15 @@ def test_arena_worker_plays_assigned_games():
     for _ in range(4):
         msg = q.get(timeout=120)
         assert not (isinstance(msg, tuple) and msg and msg[0] == "__worker_error__"), msg
-        assert isinstance(msg, tuple) and len(msg) == 2, "worker must ship (result, plies)"
+        assert isinstance(msg, tuple) and len(msg) == 3, \
+            "worker must ship (result, plies, skipped)"
         results.append(msg)
     p.join(timeout=120)
     assert p.exitcode == 0
     assert len(results) == 4
-    assert all(r in (WHITE, BLACK, DRAW) for r, _p in results)
-    assert all(isinstance(p, int) and p > 0 for _r, p in results)
+    assert all(r in (WHITE, BLACK, DRAW) for r, _p, _s in results)
+    assert all(isinstance(p, int) and p > 0 for _r, p, _s in results)
+    assert all(s == 0 for _r, _p, s in results)  # no book -> nothing skipped
 
 
 def test_arena_worker_continues_color_schedule_from_start():
@@ -123,11 +125,12 @@ def test_arena_worker_continues_color_schedule_from_start():
     for _ in range(2):
         msg = q.get(timeout=120)
         assert not (isinstance(msg, tuple) and msg and msg[0] == "__worker_error__"), msg
-        assert isinstance(msg, tuple) and len(msg) == 2, "worker must ship (result, plies)"
+        assert isinstance(msg, tuple) and len(msg) == 3, \
+            "worker must ship (result, plies, skipped)"
         results.append(msg)
     p.join(timeout=120)
     assert p.exitcode == 0
-    assert all(r in (WHITE, BLACK, DRAW) for r, _p in results)
+    assert all(r in (WHITE, BLACK, DRAW) for r, _p, _s in results)
 
 
 def test_arena_worker_reports_failure_in_band():
@@ -187,10 +190,11 @@ def test_collect_arena_counts_results_in_a_frame(tmp_path):
     from smartfour.train import Trainer
 
     t = Trainer(make_config(tmp_path))
-    q = FakeQueue([WHITE, BLACK, DRAW, WHITE])
+    q = FakeQueue([(WHITE, 3, 2), (BLACK, 4, 1), (DRAW, 5, 0), (WHITE, 6, 1)])
     procs = [FakeProc(), FakeProc()]
-    a_wins, b_wins, draws, plies = t._collect_arena(4, procs, q, fake_bar())
+    a_wins, b_wins, draws, plies, skipped = t._collect_arena(4, procs, q, fake_bar())
     assert (a_wins, b_wins, draws) == (2, 1, 1)
+    assert plies == 18 and skipped == 4
 
 
 def test_collect_arena_raises_on_worker_error_marker(tmp_path):
@@ -233,7 +237,8 @@ def test_trainer_arena_one_matches_sequential(tmp_path, monkeypatch):
 
     calls = []
 
-    def fake_play_arena(net_a, net_b, mcts_cfg, games, progress=None, plies_out=None):
+    def fake_play_arena(net_a, net_b, mcts_cfg, games, progress=None,
+                        plies_out=None, book=(), seed=0, skipped_out=None):
         calls.append((net_a, net_b, mcts_cfg, games))
         return (3, 1, 0)
 
@@ -243,8 +248,8 @@ def test_trainer_arena_one_matches_sequential(tmp_path, monkeypatch):
     monkeypatch.setattr(train_mod, "play_arena", fake_play_arena)
     monkeypatch.setattr(Trainer, "_arena_parallel", should_not_spawn)
     t = Trainer(make_config(tmp_path, workers=1))
-    result = t._arena(t.net, t.best_net, 4)
-    assert result == (3, 1, 0, 0)
+    result = t._arena(t.net, t.best_net, 4, seed=7)
+    assert result == (3, 1, 0, 0, 0)
     assert calls == [(t.net, t.best_net, t.cfg.mcts, 4)]
 
 
@@ -257,7 +262,7 @@ def test_trainer_arena_with_workers(tmp_path, monkeypatch):
     from smartfour.train import Trainer
 
     t = Trainer(make_config(tmp_path, workers=2))
-    wins, losses, draws, plies = t._arena(t.net, t.best_net, 2)
+    wins, losses, draws, plies, skipped = t._arena(t.net, t.best_net, 2, seed=7)
     assert wins + losses + draws == 2
 
 
@@ -278,4 +283,4 @@ def test_arena_spawns_daemonic_workers(tmp_path, monkeypatch):
 
     monkeypatch.setattr(train_mod.multiprocessing, "get_context", lambda name: RecCtx())
     t = Trainer(make_config(tmp_path, workers=2))
-    assert t._arena(t.net, t.best_net, 4) == (2, 1, 1, 0)
+    assert t._arena(t.net, t.best_net, 4, seed=7) == (2, 1, 1, 0, 0)

@@ -270,8 +270,8 @@ def test_best_replaced_only_above_ratio(tmp_path, monkeypatch):
     cfg = make_config(tmp_path)
     t = Trainer(cfg)
 
-    def fake_arena(net_a, net_b, games):
-        return (2, 0, 0, 0)  # candidate wins 2 of 2 -> ratio 1.0
+    def fake_arena(net_a, net_b, games, seed=None):
+        return (2, 0, 0, 0, 0)  # candidate wins 2 of 2 -> ratio 1.0
 
     monkeypatch.setattr(t, "_arena", fake_arena)
     t._maybe_update_best(1)
@@ -292,8 +292,8 @@ def test_best_not_replaced_when_losing(tmp_path, monkeypatch):
     cfg = make_config(tmp_path)
     t = Trainer(cfg)
 
-    def fake_arena(net_a, net_b, games):
-        return (0, 2, 0, 0)  # candidate loses
+    def fake_arena(net_a, net_b, games, seed=None):
+        return (0, 2, 0, 0, 0)  # candidate loses
 
     monkeypatch.setattr(t, "_arena", fake_arena)
     t._maybe_update_best(1)
@@ -308,8 +308,8 @@ def test_best_replaced_with_draws_scored_half(tmp_path, monkeypatch):
     cfg = make_config(tmp_path)
     t = Trainer(cfg)
 
-    def fake_arena(net_a, net_b, games):
-        return (1, 0, 1, 0)  # ratio = (1 + 0.5) / 2 = 0.75
+    def fake_arena(net_a, net_b, games, seed=None):
+        return (1, 0, 1, 0, 0)  # ratio = (1 + 0.5) / 2 = 0.75
 
     monkeypatch.setattr(t, "_arena", fake_arena)
     t._maybe_update_best(1)
@@ -322,22 +322,22 @@ def test_best_not_replaced_when_draws_dilute_below_ratio(tmp_path, monkeypatch):
     cfg = make_config(tmp_path, eval_games=30, arena_win_ratio=0.55)
     t = Trainer(cfg)
 
-    def fake_arena(net_a, net_b, games):
-        return (12, 8, 10, 0)  # ratio = (12 + 5) / 30 = 0.567 -> promotes
+    def fake_arena(net_a, net_b, games, seed=None):
+        return (12, 8, 10, 0, 0)  # ratio = (12 + 5) / 30 = 0.567 -> promotes
 
     monkeypatch.setattr(t, "_arena", fake_arena)
     t._maybe_update_best(1)
     assert (tmp_path / "best1.pt").exists()
 
-    def fake_arena_short(net_a, net_b, games):
-        return (11, 8, 11, 0)  # ratio = (11 + 5.5) / 30 = 0.55 -> promotes (>=)
+    def fake_arena_short(net_a, net_b, games, seed=None):
+        return (11, 8, 11, 0, 0)  # ratio = (11 + 5.5) / 30 = 0.55 -> promotes (>=)
 
     monkeypatch.setattr(t, "_arena", fake_arena_short)
     t._maybe_update_best(2)
     assert t.best_iteration == 2
 
-    def fake_arena_fail(net_a, net_b, games):
-        return (11, 9, 10, 0)  # ratio = (11 + 5) / 30 = 0.533 -> no promote
+    def fake_arena_fail(net_a, net_b, games, seed=None):
+        return (11, 9, 10, 0, 0)  # ratio = (11 + 5) / 30 = 0.533 -> no promote
 
     monkeypatch.setattr(t, "_arena", fake_arena_fail)
     t._maybe_update_best(3)

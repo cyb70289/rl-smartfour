@@ -110,13 +110,35 @@ Training
    BatchNorm running statistics actually update (MCTS leaves it in eval mode);
    samples are augmented with a random D4 symmetry transform of the 5x5 board
    (policy permuted identically, value invariant)
-4. arena: greedy MCTS vs the current best net (alternating colors,
-   `eval_games` games, `[mcts]` `simulations` per move); the candidate
-   replaces the best when its win ratio reaches `arena_win_ratio`
-   (default 0.55)
+4. arena: greedy MCTS vs the current best net (`eval_games` games,
+   `[mcts]` `simulations` per move); games start from opening-book states
+   when a book exists (see "Opening book" below), otherwise colors
+   alternate from the initial board; the candidate replaces the best when
+   its win ratio reaches `arena_win_ratio` (default 0.55)
+
 5. before iteration 1 of a fresh start, when `pretrain_games > 0`
    (`[training]`), the value head is bootstrapped on random-rollout outcomes
    (see "Value bootstrap" below); resumes skip it.
+
+Opening book (`smartfour/openbook.py`)
+--------------------------------------
+A greedy arena (no dirichlet noise, temperature 0) from the initial board
+reaches the same game twice — once per color — so head-to-head results are
+nearly binary. Following Leela Chess Zero's opening-book idea, the arena
+instead starts each game pair from a pre-played state:
+`tools/make_openbook.py --checkpoint checkpoints/best1.pt` self-plays the
+checkpoint WITH root noise and the temperature schedule, keeps the first
+`--head` (default 6) post-move states of every game plus `--tail`
+(default 4) uniformly random later ones, deduplicates exactly (bitboards +
+side to move), and writes `--target` (default 1000) unique states into the
+marked data section of `smartfour/openbook.py` (atomically; entries are
+human-readable 5x5 arrays of bottom-to-top stack strings like `"wbbb."`,
+side to move inferred from piece counts). Games too short to offer enough
+tail states are skipped. At arena time each book state is played twice with
+roles swapped (candidate to move vs best to move), seeded deterministically
+per iteration; ply statistics report both raw (incl. skipped book plies)
+and played counts. With an empty or absent book the arena behaves exactly
+as before.
 
 Value bootstrap (`smartfour/pretrain.py`)
 ----------------------------------------
