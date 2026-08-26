@@ -755,6 +755,8 @@ class Trainer:
                     n_arena = max(1, s["arena_wins"] + s["arena_losses"] + s["arena_draws"])
                     bar.update(1)
                     tqdm.write(
+                        f"iter {s['iteration']:3d}  loss {s['loss_mean']:.4f}"
+                        f" (pol {s['policy_loss']:.3f} val {s['value_loss']:.3f})  "
                         f"buffer {s['buffer_size']} ({s['buffer_games']}g)  "
                         f"arena {s['arena_wins']}W/{s['arena_losses']}L/{s['arena_draws']}D"
                         f" ({s['arena_ratio']:.2f}) "
