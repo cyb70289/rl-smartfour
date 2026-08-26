@@ -120,7 +120,7 @@ Training
    (`[training]`), the value head is bootstrapped on random-rollout outcomes
    (see "Value bootstrap" below); resumes skip it.
 
-Opening book (`smartfour/openbook.py`)
+Opening book (`model/openbook.json`)
 --------------------------------------
 A greedy arena (no dirichlet noise, temperature 0) from the initial board
 reaches the same game twice — once per color — so head-to-head results are
@@ -130,11 +130,11 @@ instead starts each game pair from a pre-played state:
 checkpoint WITH root noise and the temperature schedule, keeps the first
 `--head` (default 6) post-move states of every game plus `--tail`
 (default 4) uniformly random later ones, deduplicates exactly (bitboards +
-side to move), and writes `--target` (default 1000) unique states into the
-marked data section of `smartfour/openbook.py` (atomically; entries are
-human-readable 5x5 arrays of bottom-to-top stack strings like `"wbbb."`,
-side to move inferred from piece counts). Games too short to offer enough
-tail states are skipped. At arena time each book state is played twice with
+side to move), and writes `--target` (default 1000) unique states to
+`model/openbook.json` (atomically; entries are human-readable 5x5 arrays
+of bottom-to-top stack strings like `"wbbb."`, side to move inferred from
+piece counts). Games too short to offer enough tail states are skipped.
+At arena time each book state is played twice with
 roles swapped (candidate to move vs best to move), seeded deterministically
 per iteration; ply statistics report both raw (incl. skipped book plies)
 and played counts. With an empty or absent book the arena behaves exactly

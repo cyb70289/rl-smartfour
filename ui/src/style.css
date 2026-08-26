@@ -165,3 +165,29 @@ button.primary:hover:not(:disabled) { background: #275f7a; }
 .banner.win-black { color: #9aa0b0; border-color: #777; }
 .banner.draw { color: var(--muted); }
 .banner.error { color: var(--danger); border-color: var(--danger); }
+
+.openbook-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+}
+.openbook-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.openbook-list button {
+  flex: none;
+  text-align: left;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.openbook-list button.selected {
+  background: #1f4d63;
+  border-color: #2e6f8f;
+}

@@ -1,14 +1,14 @@
-"""Tests for the opening book: format round-trip, strict parsing, data-block
-rendering, and arena game plans."""
+"""Tests for the opening book: format round-trip, strict parsing, JSON
+loading, and arena game plans."""
 
 import random
+import json
 
 import pytest
 
 from smartfour import openbook
 from smartfour.game import BLACK, WHITE, apply_move, initial_state
 from smartfour.openbook import (
-    DATA_BEGIN,
     book_key,
     entry_to_state,
     game_plans,
@@ -105,57 +105,25 @@ def test_parse_rejects_won_position():
     with pytest.raises(ValueError, match="won"):
         entry_to_state(base)
 
-def test_load_book_empty_by_default():
-    saved = openbook.BOOK
-    try:
-        openbook.BOOK = []
-        assert load_book() == []
-    finally:
-        openbook.BOOK = saved
+def test_load_book_missing_file_is_empty(tmp_path, monkeypatch):
+    monkeypatch.setattr(openbook, "BOOK_PATH", tmp_path / "openbook.json")
+    assert load_book() == []
 
 
-def test_load_book_parses_and_rejects_duplicates():
+def test_load_book_parses_and_rejects_duplicates(tmp_path, monkeypatch):
     state = midgame_state([(2, 2), (2, 2)])
     entry = state_to_entry(state)
-    saved = openbook.BOOK
-    try:
-        openbook.BOOK = [entry, entry]
-        with pytest.raises(ValueError, match="duplicate"):
-            load_book()
-        openbook.BOOK = [entry, state_to_entry(midgame_state([(1, 1)]))]
-        book = load_book()
-        assert len(book) == 2
-        assert book[0].white == state.white and book[0].black == state.black
-    finally:
-        openbook.BOOK = saved
+    path = tmp_path / "openbook.json"
+    monkeypatch.setattr(openbook, "BOOK_PATH", path)
 
+    path.write_text(json.dumps([entry, entry]))
+    with pytest.raises(ValueError, match="duplicate"):
+        load_book()
 
-# --------------------------------------------------------------- rendering
-
-TEMPLATE = f'''"""doc"""\n{DATA_BEGIN}\n# old meta\nBOOK: list = []\n'''
-
-
-def _full_template():
-    from smartfour.openbook import DATA_END
-    return TEMPLATE.rstrip("\n") + "\n" + DATA_END + "\n"
-
-
-def test_apply_data_block_roundtrip():
-    source = _full_template()
-    states = [midgame_state([(2, 2), (2, 2)]), midgame_state([(0, 0)])]
-    entries = [state_to_entry(s) for s in states]
-    new_source = openbook.apply_data_block(source, entries, ["meta line"])
-    assert new_source.count(DATA_BEGIN) == 1
-    namespace: dict = {}
-    exec(new_source, {"__name__": "openbook_test"}, namespace)  # noqa: S102
-    parsed = [entry_to_state(e) for e in namespace["BOOK"]]
-    assert [(s.white, s.black, s.current) for s in parsed] == \
-        [(s.white, s.black, s.current) for s in states]
-
-
-def test_apply_data_block_requires_markers():
-    with pytest.raises(ValueError, match="data section"):
-        openbook.apply_data_block("BOOK = []\n", [], [])
+    path.write_text(json.dumps([entry, state_to_entry(midgame_state([(1, 1)]))]))
+    book = load_book()
+    assert len(book) == 2
+    assert book[0].white == state.white and book[0].black == state.black
 
 
 # ------------------------------------------------------------------ plans

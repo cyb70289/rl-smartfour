@@ -7,8 +7,8 @@ are nearly binary. This tool instead self-plays a strong checkpoint WITH
 root noise and the usual temperature schedule and harvests diverse, solid
 positions: the first `--head` states of every game plus `--tail` random
 later states. Collected states are deduplicated exactly (bitboards + side
-to move) until `--target` unique states are found, then written into
-smartfour/openbook.py's marked data section (atomically, preserving code).
+to move) until `--target` unique states are found, then written to
+model/openbook.json (atomically via a temp file + rename).
 
 Example:
     python tools/make_openbook.py --checkpoint checkpoints/best1.pt
@@ -16,6 +16,7 @@ Example:
 
 import argparse
 import contextlib
+import json
 import multiprocessing
 import os
 import queue as queue_mod
@@ -35,14 +36,13 @@ from smartfour.game import apply_move, initial_state, is_terminal  # noqa: E402
 from smartfour.mcts import MCTS  # noqa: E402
 from smartfour.network import ResNet  # noqa: E402
 from smartfour.openbook import (  # noqa: E402
-    apply_data_block,
     book_key,
     entry_to_state,
     state_to_entry,
 )
 from smartfour.selfplay import ignore_sigint, worker_num_threads  # noqa: E402
 
-OPENBOOK_PATH = MODEL_DIR / "smartfour" / "openbook.py"
+OPENBOOK_PATH = MODEL_DIR / "openbook.json"
 
 
 def play_game_states(net, mcts_cfg):
@@ -265,17 +265,9 @@ def main(argv=None) -> None:
     for i, entry in enumerate(rendered):
         entry_to_state(entry, index=i)
 
-    source = OPENBOOK_PATH.read_text()
-    meta = [
-        f"entries: {len(rendered)}",
-        f"source: {Path(args.checkpoint).name} @ iteration {best_iteration},"
-        f" {mcts_cfg.simulations} sims/move",
-        f"sampling: head={args.head} tail={args.tail} seed={seed}",
-        f"generated: {time.strftime('%Y-%m-%d %H:%M:%S')}",
-    ]
-    new_source = apply_data_block(source, rendered, meta)
-    tmp = OPENBOOK_PATH.with_suffix(".py.tmp")
-    tmp.write_text(new_source)
+    tmp = OPENBOOK_PATH.with_suffix(".json.tmp")
+    with open(tmp, "w") as f:
+        json.dump(rendered, f, separators=(",", ":"))
     os.replace(tmp, OPENBOOK_PATH)
 
     dt = time.perf_counter() - t0
