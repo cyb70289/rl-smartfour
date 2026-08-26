@@ -575,7 +575,7 @@ class Trainer:
 
     def _maybe_update_best(self, current_iteration: int) -> dict:
         games = self.cfg.training.eval_games
-        wins, losses, draws, raw_plies, played_plies = self._arena(
+        wins, losses, draws, played_plies, skipped_plies = self._arena(
             self.net, self.best_net, games,
             seed=self.cfg.training.seed + current_iteration,
         )
@@ -593,7 +593,7 @@ class Trainer:
             "arena_losses": losses,
             "arena_draws": draws,
             "arena_ratio": ratio,
-            "arena_plies": raw_plies,
+            "arena_plies": played_plies + skipped_plies,
             "arena_plies_played": played_plies,
             "improved": improved,
         }
