@@ -470,7 +470,7 @@ class Trainer:
             sum(vals) / len(vals) if vals else float("nan"),
         )
 
-    def _arena(self, net_a, net_b, games: int, seed: int):
+    def _arena(self, net_a, net_b, games: int):
         workers = self.cfg.training.workers
         if workers <= 1:
             with _tqdm(total=games, desc="arena", unit="game", leave=False) as bar:
@@ -479,21 +479,20 @@ class Trainer:
                 w, l, d = play_arena(
                     net_a, net_b, self.cfg.mcts, games,
                     progress=bar.update, plies_out=plies_out,
-                    book=self.book, seed=seed, skipped_out=skipped_out,
+                    book=self.book, skipped_out=skipped_out,
                 )
                 return w, l, d, sum(plies_out), sum(skipped_out)
         with _tqdm(total=games, desc="arena", unit="game", leave=False) as bar:
-            return self._arena_parallel(net_a, net_b, games, workers, bar, seed)
+            return self._arena_parallel(net_a, net_b, games, workers, bar)
 
-    def _arena_parallel(self, net_a, net_b, games: int, workers: int, bar,
-                        seed: int):
+    def _arena_parallel(self, net_a, net_b, games: int, workers: int, bar):
         """Spawn one process per worker; each plays its share of games with
         fresh copies of both nets and ships per-game results over a queue.
         Fails fast if any worker errors or dies before delivering its games.
         Workers are daemonic (a dying parent cannot orphan them) and ignore
         SIGINT (the parent alone decides when to stop).
         """
-        plans = game_plans(len(self.book), games, seed)
+        plans = game_plans(len(self.book), games)
         ctx = multiprocessing.get_context("spawn")
         out_q = ctx.Queue()
         net_a_state = {k: v.cpu() for k, v in net_a.state_dict().items()}
@@ -577,7 +576,6 @@ class Trainer:
         games = self.cfg.training.eval_games
         wins, losses, draws, played_plies, skipped_plies = self._arena(
             self.net, self.best_net, games,
-            seed=self.cfg.training.seed + current_iteration,
         )
         total = wins + losses + draws
         # Draws count as half a win so a drawish but stronger candidate can

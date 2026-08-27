@@ -25,7 +25,6 @@ and the arena falls back to playing from the initial board.
 """
 
 import json
-import random
 from pathlib import Path
 
 from .game import (
@@ -153,18 +152,16 @@ def load_book() -> list:
     return book
 
 
-def game_plans(book_len: int, games: int, seed: int) -> list:
+def game_plans(book_len: int, games: int) -> list:
     """Per-game plan of (book_index, a_moves_first) for `games` arena games.
 
-    Book states are drawn uniformly with replacement, seeded, so sequential
-    and parallel runs map game g onto the same plan deterministically. Games
-    come in pairs sharing one state with swapped roles (net_a to move vs
-    net_b to move); with an odd count the last state plays once. With no
+    Book states are taken in sequence, wrapping around after the last one,
+    so a book of n states serves 2n contests: each state played twice with
+    swapped roles (net_a to move vs net_b to move). Games come in pairs
+    sharing one state; with an odd count the last state plays once. With no
     book (book_len == 0) the plan falls back to the classic alternating
     colors from the initial board.
     """
-    rng = random.Random(seed)
     if book_len <= 0:
         return [(None, i % 2 == 0) for i in range(games)]
-    draws = [rng.randrange(book_len) for _ in range((games + 1) // 2)]
-    return [(draws[i // 2], i % 2 == 0) for i in range(games)]
+    return [(i // 2 % book_len, i % 2 == 0) for i in range(games)]

@@ -162,7 +162,7 @@ def test_play_arena_book_pairs_share_state_with_swapped_roles(monkeypatch):
     plies_out, skipped_out = [], []
     a_wins, b_wins, draws = play_arena(
         net_a, net_b, cfg(), games=4, plies_out=plies_out,
-        book=[start], seed=123, skipped_out=skipped_out)
+        book=[start], skipped_out=skipped_out)
     assert (a_wins, b_wins, draws) == (4, 0, 0)  # net_a always first arg wins
     assert all(s == id(start) for _na, _nb, s in calls)
     # Roles swap inside each pair: net_a is the first arg in games 0/2,
@@ -176,5 +176,5 @@ def test_play_arena_book_pairs_share_state_with_swapped_roles(monkeypatch):
 
 def test_play_arena_without_book_matches_legacy_alternation():
     plans = __import__("smartfour.openbook", fromlist=["game_plans"]).game_plans
-    assert plans(0, 4, seed=0)[0] == (None, True)
-    assert plans(0, 4, seed=0)[1] == (None, False)
+    assert plans(0, 4)[0] == (None, True)
+    assert plans(0, 4)[1] == (None, False)

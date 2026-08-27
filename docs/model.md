@@ -123,18 +123,19 @@ A greedy arena (no dirichlet noise, temperature 0) from the initial board
 reaches the same game twice — once per color — so head-to-head results are
 nearly binary. Following Leela Chess Zero's opening-book idea, the arena
 instead starts each game pair from a pre-played state:
-`tools/make_openbook.py --checkpoint checkpoints/best1.pt` self-plays the
-checkpoint WITH root noise and the temperature schedule, keeps the first
-`--head` (default 6) post-move states of every game plus `--tail`
-(default 4) uniformly random later ones, deduplicates exactly (bitboards +
-side to move), and writes `--target` (default 1000) unique states to
-`model/openbook.json` (atomically; entries are human-readable 5x5 arrays
-of bottom-to-top stack strings like `"wbbb."`, side to move inferred from
-piece counts). Games too short to offer enough tail states are skipped.
-At arena time each book state is played twice with
-roles swapped (candidate to move vs best to move), seeded deterministically
-per iteration; ply statistics report both raw (incl. skipped book plies)
-and played counts. With an empty or absent book the arena behaves exactly
+`tools/make_openbook.py` greedily self-plays a checkpoint (`--sims` MCTS
+simulations per move, seeded tie-breaks; White's first move forced to each
+of the 25 columns per iteration) and keeps non-terminal states still open:
+at least `--m` (default 8) plies from game end, ply-1 state dropped.
+States are deduplicated exactly (bitboards + side to move) and written
+atomically to `model/openbook.json` (default `--target` 250 entries,
+shallowest first; entries are human-readable 5x5 arrays of bottom-to-top
+stack strings like `"wbbb."`, side to move inferred from piece counts).
+Generation stops at the target or when an iteration adds nothing new.
+At arena time book states are taken in sequence, wrapping around; each
+state is played twice with roles swapped (candidate to move vs best to
+move); ply statistics report both raw (incl. skipped book plies) and
+played counts. With an empty or absent book the arena behaves exactly
 as before.
 
 Value bootstrap (`smartfour/pretrain.py`)

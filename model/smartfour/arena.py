@@ -71,7 +71,7 @@ def _result_in_a_frame(result, a_moved_first: bool):
 
 
 def play_arena(net_a, net_b, mcts_cfg, games: int, progress=None, plies_out=None,
-               book=(), seed: int = 0, skipped_out=None):
+               book=(), skipped_out=None):
     """Pit net_a against net_b over `games` games.
 
     With an opening `book`, game g starts from book[game_plans(...)[g][0]]
@@ -83,7 +83,7 @@ def play_arena(net_a, net_b, mcts_cfg, games: int, progress=None, plies_out=None
     `plies_out`, if given, receives each game's played ply count (book
     plies excluded); `skipped_out` receives the skipped book plies.
     """
-    plans = game_plans(len(book), games, seed)
+    plans = game_plans(len(book), games)
     a_wins = b_wins = draws = 0
     for i in range(games):
         idx, a_first = plans[i]

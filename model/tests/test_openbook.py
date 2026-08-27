@@ -1,7 +1,6 @@
 """Tests for the opening book: format round-trip, strict parsing, JSON
 loading, and arena game plans."""
 
-import random
 import json
 
 import pytest
@@ -129,14 +128,14 @@ def test_load_book_parses_and_rejects_duplicates(tmp_path, monkeypatch):
 # ------------------------------------------------------------------ plans
 
 def test_game_plans_without_book_alternates_colors():
-    plans = game_plans(0, 5, seed=1)
+    plans = game_plans(0, 5)
     assert plans == [
         (None, True), (None, False), (None, True), (None, False), (None, True),
     ]
 
 
 def test_game_plans_pairs_share_states_with_swapped_roles():
-    plans = game_plans(7, 6, seed=42)
+    plans = game_plans(7, 6)
     assert len(plans) == 6
     for g in range(0, 6, 2):
         assert plans[g][0] == plans[g + 1][0], "pair shares one book state"
@@ -144,7 +143,7 @@ def test_game_plans_pairs_share_states_with_swapped_roles():
 
 
 def test_game_plans_odd_games_last_state_once():
-    plans = game_plans(5, 5, seed=9)
+    plans = game_plans(5, 5)
     assert len(plans) == 5
     # Two full pairs plus a single fifth game: only the last state plays once.
     assert plans[0][0] == plans[1][0]
@@ -152,13 +151,14 @@ def test_game_plans_odd_games_last_state_once():
     assert plans[4][1] is True
 
 
-def test_game_plans_deterministic():
-    assert game_plans(11, 8, seed=3) == game_plans(11, 8, seed=3)
-    assert game_plans(11, 8, seed=3) != game_plans(11, 8, seed=4)
+def test_game_plans_sequential_and_wraps():
+    assert game_plans(11, 8) == game_plans(11, 8)
+    assert game_plans(11, 8) != game_plans(11, 7)
+    assert [idx for idx, _ in game_plans(3, 8)] == [0, 0, 1, 1, 2, 2, 0, 0]
 
 
 def test_game_plans_indices_in_range():
-    rng = random.Random(0)
-    for _ in range(20):
-        plans = game_plans(3, 10, seed=rng.randrange(1000))
-        assert all(0 <= idx < 3 for idx, _role in plans)
+    for book_len in range(1, 6):
+        for games in range(1, 12):
+            plans = game_plans(book_len, games)
+            assert all(0 <= idx < book_len for idx, _role in plans)
