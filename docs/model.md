@@ -14,9 +14,7 @@ Devices and the inference server
 flag overrides) selects where nets run. `auto` picks cuda → mps → cpu;
 requesting an unavailable device is a hard error, never a silent fallback.
 
-- **cpu**: every worker process keeps its own local net copy (8 parallel
-  CPU inference streams beat one shared stream — threads do not scale this
-  workload on Apple silicon).
+- **cpu**: every worker process keeps its own local net copy.
 - **mps/cuda**: a single central *inference server* process owns the
   accelerator nets. Workers run MCTS tree logic on CPU and ship encoded
   leaf batches to the server over pipes; the server greedily drains all
@@ -72,9 +70,9 @@ Network
 - policy head: 1x1 convs → 5 height planes (125 logits)
 - value head: 1x1 conv → flatten → MLP → scalar in (-1, 1)
 
-Defaults (`config.toml`): 16 blocks, 128 base channels, 500 sims, batch_eval
-128. `config_small.toml` is a reduced profile (3 blocks, 32 channels) for
-quick CPU proof runs.
+Config files:
+- `config.toml` is for actual model training and inference
+- `config_small.toml` is a small network for testing only 
 
 MCTS
 ----
@@ -115,13 +113,12 @@ Training
    when a book exists (see "Opening book" below), otherwise colors
    alternate from the initial board; the candidate replaces the best when
    its win ratio reaches `arena_win_ratio` (default 0.55)
-
 5. before iteration 1 of a fresh start, when `pretrain_games > 0`
    (`[training]`), the value head is bootstrapped on random-rollout outcomes
    (see "Value bootstrap" below); resumes skip it.
 
 Opening book (`model/openbook.json`)
---------------------------------------
+------------------------------------
 A greedy arena (no dirichlet noise, temperature 0) from the initial board
 reaches the same game twice — once per color — so head-to-head results are
 nearly binary. Following Leela Chess Zero's opening-book idea, the arena
@@ -142,30 +139,14 @@ as before.
 
 Value bootstrap (`smartfour/pretrain.py`)
 ----------------------------------------
-A freshly initialized value head predicts ~0 everywhere, which gives PUCT no
-q-signal: unvisited children always outscore visited ones, so every node's
-~25 children fill breadth-first before any descends, and the search freezes
-at ~3 plies of depth at ANY simulation budget (depth ~ log_25(sims)). Deep
-tactics (forks, 2-ply threats) then never enter the training data and the
-value never improves — a self-reinforcing collapse into short races.
+A freshly initialized value head predicts ~0 everywhere, which gives PUCT low
+q-signal.
 
-`pretrain_games > 0` breaks the cycle once, before iteration 1: `pretrain.py`
-plays that many random games and labels the states in the last `tail_plies`
-plies of each game with the average of `rollouts` (=20) random completions.
-The value head (plus the shared trunk; the policy head's weights are frozen)
-then trains `pretrain_epochs` epochs of MSE against those soft labels. The
-result is a value function that already knows live threats, so MCTS
-concentrates visits and the policy can learn real tactics from the very
+When `pretrain_games > 0`, before iteration 1: `pretrain.py` plays that many
+random games and then trains `pretrain_epochs` epochs of MSE against those
+soft labels. The result is a value function that already knows live threats,
+so MCTS concentrates visits and the policy can learn real tactics from the very
 first iteration.
-
-Performance: rollout collection is pure-Python game play, so it parallelizes
-across `workers` processes (independent sub-seed streams — labels are
-distribution-equal to a sequential run, not bit-equal); the training loop
-runs on the selected device (samples move once, batches slice on-device,
-D4 augmentation stays the per-batch CPU transform). At the default
-`pretrain_games = 20000` / `pretrain_epochs = 64` this is roughly
-collection ~1 min + training ~20 min on an M4 (MPS) vs ~1.8 h all-CPU
-before.
 
 Diagnostics
 -----------
@@ -173,9 +154,7 @@ Every iteration appends one JSON row to `checkpoint_dir/diagnostics.jsonl`
 and prints a `[diag it N]` block. Key fields (see
 `smartfour/diagnostics.py` and `tools/analyze_diag.py`):
 
-- `plies` (mean/median/hist): self-play game length. At 100 sims with a
-  random net this starts ~17 and collapses to ~12 as the value/policy race;
-  the ply histogram shows games ending at 7-11 (fast races).
+- `plies` (mean/median/hist): self-play game length.
 - `depth` (mean/max): MCTS search depth. Frozen at ~2-3 is the signature of
   the breadth-first fill described above.
 - `root_width`, `root_entropy`, `net_policy_entropy`: exploration health;

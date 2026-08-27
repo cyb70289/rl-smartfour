@@ -46,17 +46,6 @@ What it provides
   move; disabled when neither side is a model. The chosen effort is persisted
   (`localStorage`) and restored on the next launch; player slots always reset
   to their defaults.
-Opening-book viewer
--------------------
-Starting the server with `SMARTFOUR_VIEW=openbook` (`npm run dev` or
-`npm run preview`) boots into a read-only viewer instead of the game: play
-controls are hidden, the side panel becomes an "Open states" list (no.1 …
-no.N) with Prev/Next buttons (arrow keys work too; ends clamp), and the top
-bar shows the selection ("no.42 · White to move"). Selecting a state renders
-it on the board — pieces only, no placement, no hover ghost; drag/zoom still
-work. The states come from `model/openbook.json` (symlinked into
-`ui/public/`); no model workers are started and no `/api/think` calls are
-made. Without the env var everything behaves as before.
 
 Architecture
 ------------
@@ -157,6 +146,18 @@ Behavior
   wedge the UI.
 - `/api/think` and `/api/checkpoints` are served by Vite only (dev/preview);
   serving `dist/` with a plain static file server loses them.
+
+Opening-book viewer
+-------------------
+Starting the server with `SMARTFOUR_VIEW=openbook` (`npm run dev` or
+`npm run preview`) boots into a read-only viewer instead of the game: play
+controls are hidden, the side panel becomes an "Open states" list (no.1 …
+no.N) with Prev/Next buttons (arrow keys work too; ends clamp), and the top
+bar shows the selection ("no.42 · White to move"). Selecting a state renders
+it on the board — pieces only, no placement, no hover ghost; drag/zoom still
+work. The states come from `model/openbook.json` (symlinked into
+`ui/public/`); no model workers are started and no `/api/think` calls are
+made. Without the env var everything behaves as before.
 
 Commands
 --------
