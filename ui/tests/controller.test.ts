@@ -452,35 +452,33 @@ describe('GameController: auto play (model vs model)', () => {
     expect(ctrl.state.machineThinking).toBe(false);
   });
 
-  it('Play after game over starts a fresh game and auto plays it', async () => {
+  it('Play after game over is a no-op: Reset is the only restart', async () => {
     const { ctrl, white, black } = makeCtrl();
     ctrl.play();
     await playToWhiteWin(ctrl, white, black);
     const callsBefore = white.calls.length;
+    const history = [...ctrl.state.history];
 
     ctrl.play();
-    expect(ctrl.state.winner).toBeNull();
-    expect(ctrl.state.history).toEqual([]);
-    expect(ctrl.state.autoplay).toBe(true);
-    expect(white.calls).toHaveLength(callsBefore + 1); // exactly one fresh first move
+    expect(ctrl.state.winner).toBe('white');
+    expect(ctrl.state.history).toEqual(history); // board untouched
+    expect(ctrl.state.autoplay).toBe(false);
+    expect(white.calls).toHaveLength(callsBefore); // no fresh think
   });
 
-  it('Step after game over starts a fresh game and plays one move', async () => {
+  it('Step after game over is a no-op', async () => {
     const { ctrl, white, black } = makeCtrl();
     ctrl.play();
     await playToWhiteWin(ctrl, white, black);
     const whiteCallsBefore = white.calls.length;
     const blackCallsBefore = black.calls.length;
+    const history = [...ctrl.state.history];
 
     ctrl.step();
-    expect(ctrl.state.winner).toBeNull();
-    expect(ctrl.state.history).toEqual([]);
-    expect(ctrl.state.autoplay).toBe(false);
-    expect(white.calls).toHaveLength(whiteCallsBefore + 1);
-
-    white.resolveNext({ x: 0, z: 0 });
-    await settle();
-    expect(black.calls).toHaveLength(blackCallsBefore); // still no auto continuation
+    expect(ctrl.state.winner).toBe('white');
+    expect(ctrl.state.history).toEqual(history);
+    expect(white.calls).toHaveLength(whiteCallsBefore);
+    expect(black.calls).toHaveLength(blackCallsBefore);
   });
 
   it('respects the minimum gap between think starts', async () => {
@@ -522,5 +520,79 @@ describe('GameController: auto play (model vs model)', () => {
     ctrl.updateSettings({ effort: 2000 });
     expect(ctrl.state.settings).toEqual({ effort: 2000 });
     expect(white.calls).toHaveLength(0);
+  });
+});
+
+describe('GameController: setConfig keeps the board', () => {
+  function makeSetCtrl(opts: { autoplayGapMs?: number; now?: () => number } = { autoplayGapMs: 0 }): {
+    ctrl: GameController;
+    white: FakeMachine;
+    black: FakeMachine;
+  } {
+    const white = new FakeMachine('white');
+    const black = new FakeMachine('black');
+    const ctrl = new GameController({ white, black }, autoplay, () => {}, opts);
+    return { ctrl, white, black };
+  }
+
+  it('a mid-game slot change keeps the position; Play resumes with new players', async () => {
+    const { ctrl, white, black } = makeSetCtrl();
+    ctrl.play();
+    white.resolveNext({ x: 0, z: 0 });
+    await settle();
+    black.resolveNext({ x: 4, z: 4 });
+    await settle();
+    expect(ctrl.state.history).toHaveLength(2);
+
+    ctrl.pause();
+    // Swap black to a different model (same setup semantics in tests).
+    const switched = { ...autoplay, black: { kind: 'model', checkpoint: 'best3.pt' } as const };
+    ctrl.setConfig(switched, { white, black });
+    expect(ctrl.state.history).toHaveLength(2); // board kept
+    expect((ctrl.state.black as { kind: 'model'; checkpoint: string }).checkpoint).toBe('best3.pt');
+    expect(white.calls).toHaveLength(black.calls.length + 1); // nothing started while paused
+    ctrl.play();
+    expect(ctrl.state.autoplay).toBe(true);
+    expect(black.calls).toHaveLength(1); // the NEW black model owes the move
+  });
+
+  it('switching a model slot to human mid-think aborts and hands over control', async () => {
+    const machine = new FakeMachine();
+    const ctrl = new GameController({ white: null, black: machine }, machineHumanWhite, () => {});
+    ctrl.humanMove({ x: 2, z: 2 });
+    expect(machine.calls).toHaveLength(1);
+
+    ctrl.setConfig(
+      { white: { kind: 'human' }, black: { kind: 'human' }, settings: { effort: 100 } },
+      { white: null, black: null },
+    );
+    expect(machine.calls[0]!.signal?.aborted).toBe(true);
+    expect(ctrl.state.machineThinking).toBe(false);
+    expect(ctrl.state.history).toEqual([{ x: 2, z: 2, player: 'white' }]);
+
+    // The stale result must not land on the human-controlled board.
+    machine.resolveNext({ x: 0, z: 0 });
+    await settle();
+    expect(ctrl.state.history).toHaveLength(1);
+  });
+
+  it('switching a human slot to model makes it think immediately (machine mode)', async () => {
+    const whiteM = new FakeMachine('w');
+    const machine = new FakeMachine('b');
+    const ctrl = new GameController({ white: null, black: machine }, machineHumanWhite, () => {});
+    ctrl.humanMove({ x: 2, z: 2 });
+    machine.resolveNext({ x: 4, z: 4 });
+    await settle();
+    expect(ctrl.state.current).toBe('white');
+    expect(ctrl.state.machineThinking).toBe(false);
+
+    ctrl.setConfig(
+      { white: { kind: 'model', checkpoint: 'best9.pt' }, black: { kind: 'human' }, settings: { effort: 100 } },
+      { white: whiteM, black: null },
+    );
+    expect((ctrl.state.white as { kind: 'model'; checkpoint: string }).checkpoint).toBe('best9.pt');
+    expect(ctrl.state.machineThinking).toBe(true);
+    expect(whiteM.calls).toHaveLength(1); // instant response
+    expect(ctrl.state.history).toHaveLength(2); // untouched
   });
 });

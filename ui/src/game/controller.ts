@@ -1,7 +1,7 @@
 import { reduce, newGame } from './engine';
 import type { GameConfig } from './engine';
 import type { GameState, Move, Player, ThinkSettings } from './types';
-import { modeOf } from './types';
+import { isModel, modeOf } from './types';
 import type { MachinePlayer } from './machine';
 
 /** The model player per color; null = that side is human. */
@@ -28,7 +28,7 @@ export interface ControllerOptions {
  * - kicks off `think` on the model player of the color that owes a move
  *   whenever the state owes one (machine and autoplay modes),
  * - guards against stale model results (generation counter incremented on
- *   every reset/abort, plus an AbortSignal for the in-flight think),
+ *   every reset/setConfig/abort, plus an AbortSignal for the in-flight think),
  * - exposes `thinking` through the state while a think is actually in
  *   flight (distinct from `machineThinking`, which also covers owed moves
  *   that have not started: paused auto play, the between-move gap),
@@ -82,22 +82,13 @@ export class GameController {
   }
 
   /**
-   * Starts or resumes model-vs-model auto play. When the game is over, starts
-   * a fresh game first (Play is the only restart path in auto play). No-op in
+   * Starts or resumes model-vs-model auto play on the current board state.
+   * A finished game is a no-op — Reset is the only restart. No-op in
    * person/machine modes.
    */
   play(): void {
     if (modeOf(this.state.white, this.state.black) !== 'autoplay') return;
-    if (this.state.winner !== null) {
-      this.reset(
-        { white: this.state.white, black: this.state.black, settings: this.state.settings },
-        this.players,
-      );
-      this.setState({ ...this.state, autoplay: true });
-      this.kickMachine();
-      return;
-    }
-    if (this.state.autoplay) return; // already running
+    if (this.state.winner !== null || this.state.autoplay) return; // over / already running
     this.setState({ ...this.state, autoplay: true, machineThinking: true });
     this.kickMachine();
   }
@@ -111,21 +102,38 @@ export class GameController {
   }
 
   /**
-   * Plays exactly one move: stops auto play, then starts a single think (a
-   * fresh game when the previous one is over).
+   * Plays exactly one move from the current board state: stops auto play,
+   * then starts a single think. A finished game is a no-op — Reset is the
+   * only restart.
    */
   step(): void {
     if (modeOf(this.state.white, this.state.black) !== 'autoplay') return;
+    if (this.state.winner !== null) return;
     this.abortInFlight();
-    if (this.state.winner !== null) {
-      this.reset(
-        { white: this.state.white, black: this.state.black, settings: this.state.settings },
-        this.players,
-      );
-    }
     this.setState({ ...this.state, autoplay: false, machineThinking: true });
     this.startThink();
   }
+
+  /**
+   * Applies new player slots (and think settings) to the CURRENT board:
+   * pieces, history, turn and result are kept; only the in-flight think is
+   * aborted. Outside running auto play the change takes effect immediately —
+   * if it is now a model's turn its think starts at once; in auto play the
+   * loop resumes/starts only on an explicit Play.
+   */
+  setConfig(config: GameConfig, players: PlayerMachines): void {
+    this.abortInFlight();
+    this.players = players;
+    const s = { ...this.state, white: config.white, black: config.black, settings: config.settings };
+    s.thinking = false;
+    // An owed move stays flagged except while auto play sits paused.
+    s.machineThinking =
+      s.winner === null && isModel(s, s.current) &&
+      (modeOf(s.white, s.black) !== 'autoplay' || s.autoplay);
+    this.setState(s);
+    this.kickMachine();
+  }
+
 
   /**
    * Applies new think settings without restarting the game. If a model is

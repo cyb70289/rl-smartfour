@@ -62,7 +62,11 @@ model = play against the machine (either color), both models = auto play
 with Play/Pause and Step controls (moves start at least 2s apart). Think
 effort is Entry/Medium/High (0 = policy only, default Medium, remembered
 across launches) — setup changes apply immediately, and you can revert moves
-(including finished games).
+(including finished games). Changing players keeps the current board:
+outside auto play a model owing a move thinks at once, in auto play press
+Play to continue on the current position. While auto play runs, player slots
+and think effort are locked; **Reset** clears the board and restarts
+explicitly (the only way to begin again after a finished game).
 
 ## CREDIT
 

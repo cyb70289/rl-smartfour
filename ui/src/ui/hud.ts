@@ -4,7 +4,8 @@ import { modeOf, humanColorOf } from '../game/types';
 
 export interface HudCallbacks {
   onRevert(): void;
-  onNewGame(config: GameConfig): void;
+  onReset(config: GameConfig): void;
+  onPlayersChange(config: GameConfig): void;
   onPlayPause(): void;
   onStep(): void;
   onSettingsChange(settings: ThinkSettings): void;
@@ -22,7 +23,8 @@ function cap(s: string): string {
 export class Hud {
   private statusEl: HTMLElement;
   private revertBtn: HTMLButtonElement;
-  private newGameBtn: HTMLButtonElement;
+  private playBtn: HTMLButtonElement;
+  private resetBtn: HTMLButtonElement;
   private whiteKindRadios: NodeListOf<HTMLInputElement>;
   private blackKindRadios: NodeListOf<HTMLInputElement>;
   private whiteSelect: HTMLSelectElement;
@@ -34,11 +36,16 @@ export class Hud {
   private mode: Mode = 'person';
   /** True once the user changed any player slot; disables the default-switch. */
   private userTouched = false;
+  /** True while model-vs-model auto play is running: player selection and
+   * think effort are locked. */
+  private autoplayRunning = false;
+
 
   constructor(root: HTMLElement, private cb: HudCallbacks) {
     this.statusEl = byId(root, 'status');
     this.revertBtn = byId<HTMLButtonElement>(root, 'revert-btn');
-    this.newGameBtn = byId<HTMLButtonElement>(root, 'new-game-btn');
+    this.playBtn = byId<HTMLButtonElement>(root, 'play-btn');
+    this.resetBtn = byId<HTMLButtonElement>(root, 'reset-btn');
     this.whiteKindRadios = root.querySelectorAll<HTMLInputElement>('input[name="white-kind"]');
     this.blackKindRadios = root.querySelectorAll<HTMLInputElement>('input[name="black-kind"]');
     this.whiteSelect = byId<HTMLSelectElement>(root, 'white-checkpoint');
@@ -49,35 +56,31 @@ export class Hud {
     this.banner.className = 'banner';
     this.banner.style.display = 'none';
     const sceneContainer = document.getElementById('scene-container');
-    sceneContainer?.appendChild(this.banner);
-
     // In auto play the action buttons become Play/Pause and Step; the click
-    // target depends on the current mode, so both handlers dispatch on it.
+    // target depends on the current mode, so the revert button dispatches.
     this.revertBtn.addEventListener('click', () => {
       if (this.mode === 'autoplay') this.cb.onStep();
       else this.cb.onRevert();
     });
-    this.newGameBtn.addEventListener('click', () => {
-      if (this.mode === 'autoplay') this.cb.onPlayPause();
-      else this.cb.onNewGame(this.pendingConfig());
-    });
-    // Player selection changes restart the game immediately.
+    this.playBtn.addEventListener('click', () => this.cb.onPlayPause());
+    this.resetBtn.addEventListener('click', () => this.cb.onReset(this.pendingConfig()));
+    // Player selection changes apply to the current board immediately.
     const wireSlot = (radios: NodeListOf<HTMLInputElement>, select: HTMLSelectElement): void => {
       radios.forEach((r) =>
         r.addEventListener('change', () => {
           this.userTouched = true;
           this.refreshSetup();
-          this.cb.onNewGame(this.pendingConfig());
+          this.cb.onPlayersChange(this.pendingConfig());
         }),
       );
       select.addEventListener('change', () => {
         this.userTouched = true;
-        this.cb.onNewGame(this.pendingConfig());
+        this.cb.onPlayersChange(this.pendingConfig());
       });
     };
     wireSlot(this.whiteKindRadios, this.whiteSelect);
     wireSlot(this.blackKindRadios, this.blackSelect);
-    // Think effort applies to the model(s) immediately, no new game needed.
+    // Think effort applies to the model(s) immediately.
     this.effortRadios.forEach((r) =>
       r.addEventListener('change', () => {
         this.saveEffort();
@@ -120,16 +123,23 @@ export class Hud {
     this.statusEl.className = `status ${cls}`.trim();
 
     if (this.mode === 'autoplay') {
-      this.newGameBtn.textContent = state.autoplay ? 'Pause' : 'Play';
-      this.newGameBtn.disabled = false;
+      this.autoplayRunning = state.autoplay;
+      this.playBtn.hidden = false;
+      this.playBtn.textContent = state.autoplay ? 'Pause' : 'Play';
+      this.playBtn.disabled = state.winner !== null; // Reset is the only restart
       this.revertBtn.textContent = 'Step';
-      this.revertBtn.disabled = false;
+      this.revertBtn.disabled = state.winner !== null;
     } else {
-      this.newGameBtn.textContent = 'New Game';
-      this.newGameBtn.disabled = false;
+      this.autoplayRunning = false;
+      this.playBtn.hidden = true;
       this.revertBtn.textContent = 'Revert';
       this.revertBtn.disabled = state.machineThinking || (state.winner === null && !state.revertAvailable);
     }
+    this.resetBtn.disabled = false;
+
+    // Re-apply slot/select/radio enablement: locking follows mode+running,
+    // which can change without any panel input.
+    this.refreshSetup();
 
     // Banner: errors and finished games only; anything else (including a
     // revert of a finished game) clears it.
@@ -163,10 +173,10 @@ export class Hud {
     this.populateSelect(this.blackSelect);
     this.refreshSetup();
     // The boot config starts before the list arrives; if the user has not
-    // touched the panel, restart with the real default (biggest best{n}.pt)
-    // so the running game matches the dropdown.
+    // touched the panel, adopt the real default (biggest best{n}.pt) so the
+    // running game matches the dropdown.
     if (!this.userTouched && this.checkpoints.length > 0) {
-      this.cb.onNewGame(this.pendingConfig());
+      this.cb.onPlayersChange(this.pendingConfig());
     }
   }
 
@@ -220,10 +230,17 @@ export class Hud {
     const whiteModel = this.selectedValue(this.whiteKindRadios) === 'model';
     const blackModel = this.selectedValue(this.blackKindRadios) === 'model';
     const noModels = this.checkpoints.length === 0;
-    this.whiteSelect.disabled = !whiteModel || noModels;
-    this.blackSelect.disabled = !blackModel || noModels;
+    const lockPlayerControls = this.mode === 'autoplay' && this.autoplayRunning;
+    this.whiteSelect.disabled = !whiteModel || noModels || lockPlayerControls;
+    this.blackSelect.disabled = !blackModel || noModels || lockPlayerControls;
     this.effortRadios.forEach((r) => {
-      r.disabled = !whiteModel && !blackModel;
+      r.disabled = (!whiteModel && !blackModel) || lockPlayerControls;
+    });
+    this.whiteKindRadios.forEach((r) => {
+      r.disabled = lockPlayerControls;
+    });
+    this.blackKindRadios.forEach((r) => {
+      r.disabled = lockPlayerControls;
     });
   }
 

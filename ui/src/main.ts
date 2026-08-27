@@ -52,10 +52,9 @@ function startGame(): void {
   }
 
   const DEFAULT_WHITE: PlayerSlot = { kind: 'human' };
-  // Placeholder until the checkpoint list loads: the bridge falls back to the
-  // biggest best{n}.pt, and loadCheckpoints restarts with it when untouched.
+  // Placeholder checkpoint until the list loads: the bridge falls back to the
+  // biggest best{n}.pt, and loadCheckpoints adopts it when untouched.
   const DEFAULT_BLACK: PlayerSlot = { kind: 'model', checkpoint: '' };
-
   /** The model player per slot; null = human. */
   function playersOf(config: GameConfig): { white: ModelMachinePlayer | null; black: ModelMachinePlayer | null } {
     return {
@@ -87,9 +86,13 @@ function startGame(): void {
 
   const hud = new Hud(document.getElementById('app')!, {
     onRevert: () => controller.revert(),
-    onNewGame: (cfg) => {
+    onReset: (cfg) => {
       config = cfg;
       controller.reset(cfg, playersOf(cfg));
+    },
+    onPlayersChange: (cfg) => {
+      config = cfg;
+      controller.setConfig(cfg, playersOf(cfg));
     },
     onPlayPause: () => {
       if (controller.state.autoplay) controller.pause();

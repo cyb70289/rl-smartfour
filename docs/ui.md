@@ -20,20 +20,27 @@ What it provides
   either *Human* or *Model* (radio). A model slot has a dropdown of every
   `best{n}.pt` checkpoint in `model/checkpoints` (largest n = strongest,
   listed largest first, and that largest one is selected by default).
-  Defaults: white human, black model. Any player-selection change restarts
-  the game immediately.
+  Defaults: white human, black model. Changing a player slot or its
+  checkpoint keeps the current board: outside running auto play the change
+  takes effect immediately (a model owing a move thinks at once), in auto
+  play it waits for Play.
 - Game modes fall out of the slots:
   - both human — classic hot-seat play;
   - one model — play against the model (either color);
-  - both model — auto play: the **New Game** button becomes **Play/Pause** and
-    **Revert** becomes **Step**. Play starts/resumes the match (a finished
-    game restarts), Pause aborts the in-flight think, Step plays exactly one
-    move and pauses. Auto play moves start at least 2s apart; a think that
-    takes longer adds no extra delay.
+  - both model — auto play: **Play/Pause** and **Step** buttons. Play
+    starts/resumes the match on the CURRENT board state, Pause aborts the
+    in-flight think, Step plays exactly one move from the current state and
+    pauses. A finished game needs **Reset** — Play/Step are no-ops on it.
+    Auto play moves start at least 2s apart; a think that takes longer adds
+    no extra delay. While auto play is running the player slots and think
+    effort are locked; pause to change them.
 - Revert one level: in person mode it undoes the last move; with a model
   involved it undoes the model and the last human move together so the human
   can retry. The revert window is consumed by the revert (no double undo); a
   finished game can be reverted as well.
+- **Reset** (always enabled) clears the board and starts a fresh game with
+  the selected players, stopping any auto play or in-flight think; player
+  selections and effort are kept. It replaces the old New Game button.
 - Think effort selectable as three radios — Entry (0 = policy only), Medium
   (500), High (2000), default Medium — applied immediately to every model
   move; disabled when neither side is a model. The chosen effort is persisted
