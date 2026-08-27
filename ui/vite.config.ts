@@ -27,6 +27,16 @@ function viewModeEndpoint(): Plugin {
 
 export default defineConfig({
   plugins: [modelBridge(), viewModeEndpoint()],
+  build: {
+    rollupOptions: {
+      output: {
+        // Split the three.js library into its own chunk: it only changes on
+        // a dependency bump, so app rebuilds keep it browser-cached and the
+        // board paints without re-downloading half a megabyte.
+        manualChunks: { three: ['three'] },
+      },
+    },
+  },
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
