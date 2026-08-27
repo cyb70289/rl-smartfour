@@ -110,6 +110,9 @@ button:hover:not(:disabled) { background: #2e3340; border-color: var(--accent); 
 button:disabled { opacity: 0.4; cursor: not-allowed; }
 button.primary { background: #1f4d63; border-color: #2e6f8f; }
 button.primary:hover:not(:disabled) { background: #275f7a; }
+/* Reset clears the whole board: keep it visually loud to prevent mis-clicks. */
+button.danger { background: #54211f; border-color: var(--danger); color: #ffd9d7; }
+button.danger:hover:not(:disabled) { background: #672a27; border-color: #ff8a86; }
 
 .field {
   display: flex;
