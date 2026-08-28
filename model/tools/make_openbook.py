@@ -1,21 +1,26 @@
-#!/usr/bin/env python3
-"""Generate an opening book of contested board states by greedy self-play.
+"""Generate an opening book of contested opening states by greedy self-play.
 
 A noisy self-play model produces "dumb" states where one side has already
 decided the game, which collapses arena results to ~0.5. This tool instead
 self-plays a strong checkpoint greedily — MCTS with `--sims` simulations per
 move, NO dirichlet root noise and temperature 0 (visit-count ties still
-break randomly, seeded per game) — and harvests only states that are still
-open: at least `--m` plies away from the game end.
+break randomly, seeded per game) — and harvests only early, still-open
+states: plies 2-4 that are at least `--m` plies away from the game end.
+
+Games are capped at 12 plies (PLY_CAP): once 12 plies are played with the
+game still open, every ply-4 state is guaranteed at least 8 later plies, so
+there is no point searching deeper. A game that ends before ply 12 keeps a
+ply-p state only if it still has >= `--m` plies to its actual end; early
+crushing wins therefore contribute nothing.
 
 Each iteration plays 25 games, White's first move forced to a different one
-of the 25 board columns per game (fixed order). From every game the ply-1
-state is dropped and only states at plies 2..L-m survive an L-move game.
-States are deduplicated exactly (bitboards + side to move) and merged
-across iterations; the book is written to model/openbook.json after every
-iteration (atomic tmp + rename), sorted by ply depth, shallowest first.
-Generation stops at `--target` unique states or when an iteration adds no
-new state.
+of the 25 board columns per game (fixed order). From every game only the
+ply-2..4 states survive. States are deduplicated exactly (bitboards + side
+to move) and merged across iterations; the book is written to
+model/openbook.json after every iteration (atomic tmp + rename), sorted by
+ply depth, shallowest first. Generation stops at `--target` unique states or
+when an iteration adds no new state; falling short of the target is a
+warning, not an error.
 
 Example:
     python tools/make_openbook.py --checkpoint checkpoints/best1.pt
@@ -50,6 +55,9 @@ from smartfour.openbook import (  # noqa: E402
 from smartfour.selfplay import ignore_sigint, worker_num_threads  # noqa: E402
 OPENBOOK_PATH = MODEL_DIR / "openbook.json"
 BOARD_COLUMNS = 25  # 5x5 drop columns; game g opens on column g
+HARVEST_MIN_PLY = 2   # drop the ply-1 state (forced opening move)
+HARVEST_MAX_PLY = 4   # keep only plies 2-4: early, still-contested states
+PLY_CAP = 12          # stop here: a ply-4 state then has >= 8 plies left
 
 
 def state_ply(state) -> int:
@@ -60,31 +68,40 @@ def state_ply(state) -> int:
 def play_game_states(net, mcts_cfg, first_move, torch_seed: int):
     """Greedy self-play one game: no root noise, temperature 0 (random
     visit-tie break, seeded by `torch_seed`). White's first move is forced
-    to `first_move` = (x, z). Returns every NON-terminal state in move
-    order; index i is the position after move i+1 (index 0 = after the
-    forced opening move)."""
+    to `first_move` = (x, z). Plays at most PLY_CAP plies — a still-open
+    game is stopped there, since every ply-4 state then already has >= 8
+    later plies. Returns (states, total_moves): states holds every
+    NON-terminal state in move order (index i = position after move i+1,
+    index 0 = after the forced opening move); total_moves is the number of
+    moves until the game actually ended, or None if the game was still open
+    at PLY_CAP."""
     torch.manual_seed(torch_seed)
     x, z = first_move
     state = apply_move(initial_state(), x, z)
     mcts = MCTS(net, mcts_cfg)
     states = [state]  # ply-1 state; harvest_states drops it
-    while not is_terminal(state):
+    total_moves = None
+    while len(states) < PLY_CAP:
         _pi, chosen, _root = mcts.root_policy(
             state, root_noise=False, temperature=0.0)
         mx, mz, _my = action_to_xyz(chosen)
         state = apply_move(state, mx, mz)
-        if not is_terminal(state):
-            states.append(state)
-    return states
+        if is_terminal(state):
+            total_moves = len(states) + 1
+            break
+        states.append(state)
+    return states, total_moves
 
 
-def harvest_states(states, m: int):
-    """Drop the ply-1 state and keep only states still open: at least `m`
-    plies from the game end. An L-move game keeps plies 2..L-m (a 13-move
-    game with m=8 keeps plies 2..5)."""
-    total_moves = len(states) + 1  # + terminal move
+def harvest_states(states, total_moves, m: int):
+    """Keep only plies HARVEST_MIN_PLY..HARVEST_MAX_PLY that are still open:
+    at least `m` plies from the game end. A truncated game (total_moves is
+    None — still open at PLY_CAP) keeps every ply-2..4 state; a game that
+    ended on move L keeps ply p only if L - p >= m."""
     return [s for i, s in enumerate(states)
-            if i + 1 >= 2 and total_moves - (i + 1) >= m]
+            if HARVEST_MIN_PLY <= i + 1 <= HARVEST_MAX_PLY
+            and (total_moves is None or total_moves - (i + 1) >= m)]
+
 
 
 def _load_net_state(checkpoint: str):
@@ -113,9 +130,9 @@ def gen_worker(net_state, net_cfg, mcts_cfg, m, num_threads, in_q, out_q):
             if req is None:
                 return
             _iteration, game_idx, torch_seed = req
-            states = play_game_states(net, mcts_cfg,
-                                      (game_idx % 5, game_idx // 5), torch_seed)
-            out_q.put(("ok", harvest_states(states, m)))
+            states, total_moves = play_game_states(
+                net, mcts_cfg, (game_idx % 5, game_idx // 5), torch_seed)
+            out_q.put(("ok", harvest_states(states, total_moves, m)))
     except Exception as exc:  # noqa: BLE001 — report, never crash the parent
         try:
             out_q.put(("err", f"{type(exc).__name__}: {exc}"))
@@ -154,7 +171,7 @@ def main(argv=None) -> None:
                         default=str(MODEL_DIR / "checkpoints" / "best1.pt"),
                         help="model snapshot to self-play")
     parser.add_argument("--config", default=str(MODEL_DIR / "config.toml"))
-    parser.add_argument("--target", type=int, default=250,
+    parser.add_argument("--target", type=int, default=100,
                         help="number of unique book states to collect")
     parser.add_argument("--m", type=int, default=8,
                         help="keep only states with at least this many plies "
@@ -188,9 +205,12 @@ def main(argv=None) -> None:
           "no root noise, temperature 0 (random tie-break)")
     print(f"  per iter   : {BOARD_COLUMNS} games, forced 1st ply at each of "
           f"the 25 columns")
-    print(f"  filter     : drop ply 1, keep states >= {args.m} plies from end")
-    print(f"  target     : {args.target} unique states   seed: {seed}")
-    print(f"  workers    : {workers}   output: {OPENBOOK_PATH}")
+    print(f"  filter     : keep plies {HARVEST_MIN_PLY}-{HARVEST_MAX_PLY} with "
+          f">= {args.m} plies to end; games capped at {PLY_CAP} plies")
+    print(f"  target     : {args.target} unique states")
+    print(f"  seed       : {seed}")
+    print(f"  workers    : {workers}")
+    print(f"  output     : {OPENBOOK_PATH}")
     print("=" * 62, flush=True)
 
     unique: dict = {}          # book key -> GameState
@@ -216,9 +236,9 @@ def main(argv=None) -> None:
             harvested = []
             with tqdm(total=BOARD_COLUMNS, desc=f"iter {iteration}", unit="game") as bar:
                 for g in range(BOARD_COLUMNS):
-                    harvested.append(harvest_states(
-                        play_game_states(net, mcts_cfg, (g % 5, g // 5), seeds[g]),
-                        args.m))
+                    states, total_moves = play_game_states(
+                        net, mcts_cfg, (g % 5, g // 5), seeds[g])
+                    harvested.append(harvest_states(states, total_moves, args.m))
                     bar.set_postfix(unique=len(unique))
                     bar.update(1)
         else:
@@ -287,10 +307,10 @@ def main(argv=None) -> None:
 
     dt = time.perf_counter() - t0
     if len(unique) < args.target:
-        raise SystemExit(
-            f"ERROR: only {len(unique)} unique states after {iteration + 1} "
-            f"iterations ({dt / 60:.1f} min); greedy play repeats itself. "
-            "Lower --target or raise --sims.")
+        print(f"WARNING: only {len(unique)} unique states after "
+              f"{iteration + 1} iterations ({dt / 60:.1f} min); greedy play "
+              "repeats itself. Book written with fewer entries than the "
+              "target — raise --sims for more diversity if needed.")
     print(f"done: {len(unique)} unique states in {dt / 60:.1f} min "
           f"-> {OPENBOOK_PATH}")
 

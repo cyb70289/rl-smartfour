@@ -125,13 +125,17 @@ nearly binary. Following Leela Chess Zero's opening-book idea, the arena
 instead starts each game pair from a pre-played state:
 `tools/make_openbook.py` greedily self-plays a checkpoint (`--sims` MCTS
 simulations per move, seeded tie-breaks; White's first move forced to each
-of the 25 columns per iteration) and keeps non-terminal states still open:
-at least `--m` (default 8) plies from game end, ply-1 state dropped.
-States are deduplicated exactly (bitboards + side to move) and written
-atomically to `model/openbook.json` (default `--target` 250 entries,
-shallowest first; entries are human-readable 5x5 arrays of bottom-to-top
-stack strings like `"wbbb."`, side to move inferred from piece counts).
-Generation stops at the target or when an iteration adds nothing new.
+of the 25 columns per iteration). Games are capped at 12 plies: a still-open
+game stops there, since every ply-4 state then already has 8 later plies.
+Only ply-2..4 states are harvested, and only those still open: at least
+`--m` (default 8) plies from the game end — a game that ends before ply 12
+keeps a ply-p state only if it has `--m` plies left, so early one-sided
+wins contribute nothing. States are deduplicated exactly (bitboards + side
+to move) and written atomically to `model/openbook.json` (default
+`--target` 100 entries, shallowest first; entries are human-readable 5x5
+arrays of bottom-to-top stack strings like `"wbbb."`, side to move inferred
+from piece counts). Generation stops at the target or when an iteration
+adds nothing new; falling short of the target is a warning, not an error.
 At arena time book states are taken in sequence, wrapping around; each
 state is played twice with roles swapped (candidate to move vs best to
 move); ply statistics report both raw (incl. skipped book plies) and
