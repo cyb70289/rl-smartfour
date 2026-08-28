@@ -141,7 +141,7 @@ as before.
 Value bootstrap (`smartfour/pretrain.py`)
 ----------------------------------------
 A freshly initialized value head predicts ~0 everywhere, which gives PUCT low
-q-signal.
+q-signal. This can cause trouble for low MCTS depth like in config_small.toml.
 
 When `pretrain_games > 0`, before iteration 1: `pretrain.py` plays that many
 random games and then trains `pretrain_epochs` epochs of MSE against those
