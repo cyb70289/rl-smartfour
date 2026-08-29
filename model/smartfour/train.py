@@ -672,7 +672,7 @@ class Trainer:
             # Self-play evaluates the current net (slot 0).
             self.server.set_weights(0, self.net.state_dict())
         game_stats = self._selfplay(self.net)
-        self._selfplay_diag(current, game_stats)
+        diag = self._selfplay_diag(current, game_stats)
         loss_mean, policy_loss, value_loss = self._optimize()
         if self.server is not None:
             # Arena: candidate (slot 0) vs best (slot 1). Workers are dead
@@ -682,6 +682,7 @@ class Trainer:
         arena = self._maybe_update_best(current)
         self.iteration = current  # only a fully completed iteration counts
         self.save_checkpoint(self.checkpoint_dir / "latest.pt")
+        self._write_diag(current, diag, loss_mean, policy_loss, value_loss, arena)
         return {
             "iteration": self.iteration,
             "buffer_size": len(self.buffer),
@@ -692,21 +693,33 @@ class Trainer:
             **arena,
         }
 
-    def _selfplay_diag(self, current: int, game_stats: list) -> None:
-        """Aggregate self-play diagnostics, print them, and append to JSONL."""
+    def _selfplay_diag(self, current: int, game_stats: list) -> dict:
+        """Aggregate self-play diagnostics and print them; returns the diag
+        dict that _write_diag appends to JSONL once the iteration completes
+        (with loss and arena results added)."""
         agg = aggregate_games(game_stats)
         novel_frac = self._novelty(game_stats)
         buf = buffer_stats(*self.buffer.state()[:2])
-        diag = {
-            "agg": agg,
-            "buffer": buf,
-            "novel_frac": novel_frac,
-        }
         for line in format_lines(current, agg, buf, novel_frac, None):
             tqdm.write(line)
+        return {"agg": agg, "buffer": buf, "novel_frac": novel_frac}
+
+    def _write_diag(self, current: int, diag: dict,
+                    loss_mean: float, policy_loss: float, value_loss: float,
+                    arena: dict) -> None:
+        """Append one JSON row per completed iteration to diagnostics.jsonl,
+        right after latest.pt is saved, so the log covers exactly the
+        iterations the checkpoint does. Includes this iteration's training
+        losses and arena result."""
+        row = {
+            "iteration": current,
+            **diag,
+            "loss": {"mean": loss_mean, "policy": policy_loss, "value": value_loss},
+            "arena": arena,
+        }
         try:
             with open(self.checkpoint_dir / "diagnostics.jsonl", "a") as f:
-                f.write(json.dumps({"iteration": current, **diag}) + "\n")
+                f.write(json.dumps(row) + "\n")
         except OSError as exc:
             tqdm.write(f"WARNING: could not write diagnostics.jsonl: {exc}")
 

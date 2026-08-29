@@ -127,7 +127,9 @@ def aggregate_games(games: list) -> dict:
             "frac_gt_0_9": _mean([1.0 if abs(v) > 0.9 else 0.0 for v in root_values]),
         },
         "value_alignment": _mean([g["value_align"] for g in games]),
-        "value_calibration": _mean([g["value_cal"] for g in games]),
+        "value_sign_match": _mean(
+            [g["value_sign"] for g in games if g.get("value_sign") is not None]
+        ),
         "root_entropy": _mean(root_entropies),
         "net_policy_entropy": _mean(policy_entropies),
         "root_width": _mean(root_widths),
@@ -230,7 +232,7 @@ def format_lines(iteration: int, agg: dict, buf: dict, novel_frac: float,
         f"[diag it {iteration}] net root value mean={f(v['mean'])} "
         f"|v|={f(v['abs_mean'])} |v|>0.9={f(v['frac_gt_0_9'] * 100, '.1f')}% "
         f"| v*z align={f(agg['value_alignment'])} "
-        f"| |v-z|={f(agg['value_calibration'])}"
+        f"| sign match={f(agg['value_sign_match'] * 100, '.1f')}%"
     )
     lines.append(
         f"[diag it {iteration}] states/game={f(agg['states_per_game'], '.0f')} "

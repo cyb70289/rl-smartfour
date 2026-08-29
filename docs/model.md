@@ -150,16 +150,18 @@ first iteration.
 Diagnostics
 -----------
 Every iteration appends one JSON row to `checkpoint_dir/diagnostics.jsonl`
-and prints a `[diag it N]` block. Key fields (see
-`smartfour/diagnostics.py` and `tools/analyze_diag.py`):
+after the checkpoint is saved (so the log covers exactly the completed
+iterations) and prints a `[diag it N]` block during self-play. Key fields:
 
 - `plies` (mean/median/hist): self-play game length.
 - `depth` (mean/max): MCTS search depth. Frozen at ~2-3 is the signature of
   the breadth-first fill described above.
 - `root_width`, `root_entropy`, `net_policy_entropy`: exploration health;
   a collapse into a few moves shows up as width << 25 or entropy -> 0.
-- `root_value` and `value_alignment`/`value_calibration`: value-head quality.
-  Alignment near 0 means the value head has no predictive power.
+- `root_value`, `value_alignment`/`value_sign_match`: value-head quality.
+  Alignment near 0 means the value head has no predictive power;
+  `value_sign_match` is the fraction of positions (decisive games only)
+  whose value predicts the right winner (`v*z > 0`).
 - `states_per_game`, `cross_game_redundancy`, `novel vs buffer`: how much
   distinct state space self-play covers each iteration.
 - buffer `dup`/`distinct` and `pi entropy`/`one-hot`: replay-buffer

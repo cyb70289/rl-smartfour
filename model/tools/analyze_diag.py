@@ -29,11 +29,12 @@ def main():
         print("no diagnostics rows found")
         return
     print(f"{'iter':>4} {'plies':>7} {'W':>3} {'B':>3} {'D':>2} "
+          f"{'arena':>9} {'ratio':>5} {'imp':>3} "
           f"{'depth':>5} {'rootW':>5} {'visEnt':>6} {'chosen':>6} "
           f"{'polEnt':>6} {'vMean':>6} {'|v|>09':>6} {'align':>6} "
-          f"{'cal':>5} {'states':>6} {'xdup%':>6} {'novel%':>6} "
+          f"{'sign%':>5} {'states':>6} {'xdup%':>6} {'novel%':>6} "
           f"{'bufDist%':>8} {'bufDup%':>7} {'piEnt':>6} {'1hot%':>6} "
-          f"{'polL':>6} {'valL':>6}")
+          f"{'loss':>7} {'polL':>6} {'valL':>6}")
     for d in all_rows:
         it = d["iteration"]
         a = d["agg"]
@@ -41,17 +42,23 @@ def main():
         pl = a["plies"]
         w = a["winners"]
         v = a["root_value"]
+        ar = d["arena"]
+        lo = d["loss"]
+        arena = f"{ar['arena_wins']}W/{ar['arena_losses']}L/{ar['arena_draws']}D"
+        imp = "yes" if ar["improved"] else "."
         print(
             f"{it:>4} {pl['mean']:>7.2f} {w['white']:>3} {w['black']:>3} "
-            f"{w['draw']:>2} {a['depth']['mean']:>5.2f} {a['root_width']:>5.1f} "
+            f"{w['draw']:>2} {arena:>9} {ar['arena_ratio']:>5.2f} {imp:>3} "
+            f"{a['depth']['mean']:>5.2f} {a['root_width']:>5.1f} "
             f"{a['root_entropy']:>6.2f} {a['chosen_prob']:>6.2f} "
             f"{a['net_policy_entropy']:>6.2f} {v['mean']:>6.2f} "
             f"{v['frac_gt_0_9'] * 100:>5.1f}% {a['value_alignment']:>6.2f} "
-            f"{a['value_calibration']:>5.2f} {a['states_per_game']:>6.0f} "
+            f"{a['value_sign_match'] * 100:>4.1f}% {a['states_per_game']:>6.0f} "
             f"{a['cross_game_redundancy'] * 100:>5.1f}% "
             f"{d['novel_frac'] * 100:>5.1f}% "
             f"{b['distinct_frac'] * 100:>7.1f}% {b['dup_frac'] * 100:>6.1f}% "
-            f"{b['pi_entropy']:>6.2f} {b['pi_one_hot_frac'] * 100:>5.1f}%"
+            f"{b['pi_entropy']:>6.2f} {b['pi_one_hot_frac'] * 100:>5.1f}% "
+            f"{lo['mean']:>7.4f} {lo['policy']:>6.3f} {lo['value']:>6.3f}"
         )
     # ply histograms, last 5 iterations
     print("\nply histograms (upper-exclusive bins):")

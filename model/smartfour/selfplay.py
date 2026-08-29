@@ -44,7 +44,7 @@ def play_game(net, mcts_cfg, temperature_threshold: int, start_state: GameState 
         "leaf_distinct_mean": 0.0, "terminal_hits": 0,
         "nodes_mean": 0.0, "net_forwards_mean": 0.0,
         "batch_size_mean": 0.0,
-        "value_align": 0.0, "value_cal": 0.0,
+        "value_align": 0.0, "value_sign": None,
         "leaf_total": 0, "nodes_total": 0, "forwards_total": 0,
         "batch_size_total": 0.0,
     }
@@ -87,16 +87,20 @@ def play_game(net, mcts_cfg, temperature_threshold: int, start_state: GameState 
     stats["winner"] = "white" if winner == WHITE else ("black" if winner == BLACK else "draw")
     labeled = []
     align = []
-    cal = []
+    sign_hits = 0
     for i, (s, pi, player, _) in enumerate(samples):
         z = z_white if player == WHITE else -z_white
         labeled.append((s, pi, player, z))
         v = stats["root_values"][i]
         align.append(v * z)
-        cal.append(abs(v - z))
+        sign_hits += 1 if v * z > 0 else 0
     if samples:
         stats["value_align"] = sum(align) / len(samples)
-        stats["value_cal"] = sum(cal) / len(samples)
+        # Fraction of positions whose value predicts the right winner
+        # (v*z > 0). None for draw games: z is 0 everywhere, so sign match
+        # is undefined and the game is excluded from the aggregate.
+        if z_white != 0.0:
+            stats["value_sign"] = sign_hits / len(samples)
     if stats_out is not None:
         stats_out.update(stats)
     return labeled, winner
