@@ -216,7 +216,9 @@ export class GameScene {
     if (state.winningCells) {
       const cells = state.winningCells;
       const mat = new THREE.MeshStandardMaterial({ color: 0xffd54f, emissive: 0xffaa00, emissiveIntensity: 1.6 });
-      const beamY = PIECE_H + 0.06;
+      // Piece meshes span wy(y)…wy(y)+PIECE_H; BODY_H puts the beam on the
+      // vertical center of each winning piece.
+      const beamY = BODY_H;
       for (let i = 0; i < cells.length - 1; i++) {
         this.beamGroup.add(
           beamBetween(
@@ -226,10 +228,10 @@ export class GameScene {
           ),
         );
       }
-      // Glow spheres above the winning cells.
+      // Glow spheres at the center of the winning cells.
       for (const c of cells) {
         const orb = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 12), mat);
-        orb.position.set(wx(c.x), wy(c.y) + beamY + 0.05, wz(c.z));
+        orb.position.set(wx(c.x), wy(c.y) + beamY, wz(c.z));
         this.beamGroup.add(orb);
       }
     }
