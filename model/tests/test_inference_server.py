@@ -23,7 +23,7 @@ TIMEOUT = 120
 
 
 def tiny_cfg(**kw):
-    kw.setdefault("input_channels", 16)
+    kw.setdefault("input_channels", 15)
     kw.setdefault("blocks", 1)
     kw.setdefault("base_channels", 8)
     kw.setdefault("policy_channels", 4)
@@ -185,7 +185,7 @@ def test_mps_checkpoint_round_trips_through_cpu():
     state = {k: v.cpu() for k, v in net.state_dict().items()}
     host = ResNet(cfg)
     host.load_state_dict(state)  # loads onto cpu without error
-    x = torch.randn(2, 16, 5, 5)
+    x = torch.randn(2, 15, 5, 5)
     with torch.no_grad():
         _l, _v = host(x)
     assert True

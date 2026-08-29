@@ -92,7 +92,7 @@ def make_checkpoint(path):
 
     torch.manual_seed(0)
     net_cfg = NetworkConfig(
-        input_channels=16, blocks=1, base_channels=8,
+        input_channels=15, blocks=1, base_channels=8,
         policy_channels=4, value_channels=4, value_fc=8,
     )
     net = ResNet(net_cfg)

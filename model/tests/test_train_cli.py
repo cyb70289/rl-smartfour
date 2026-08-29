@@ -45,7 +45,7 @@ def write_config(tmp_path, blocks=1, **training):
     cfg_path.write_text(
         f"""
 [network]
-input_channels = 16
+input_channels = 15
 blocks = {blocks}
 base_channels = 8
 policy_channels = 4

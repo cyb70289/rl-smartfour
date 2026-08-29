@@ -20,7 +20,7 @@ from smartfour.network import ResNet
 
 
 def tiny_net_cfg(**kw):
-    kw.setdefault("input_channels", 16)
+    kw.setdefault("input_channels", 15)
     kw.setdefault("blocks", 1)
     kw.setdefault("base_channels", 8)
     kw.setdefault("policy_channels", 4)

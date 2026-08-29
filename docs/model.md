@@ -41,21 +41,15 @@ players never differ by more than one.
 
 Network input
 -------------
-16 channels of 5x5 (one plane per height level), all from the current
+15 channels of 5x5 (one plane per height level), all from the current
 player's perspective:
 
 - channels 0-4: current player's pieces per plane (1 = present)
 - channels 5-9: opponent's pieces per plane
 - channels 10-14: legality per plane — 1 at the stack top of each column
   where the current player may place (empty board ⇒ level 0), 0 elsewhere
-- channel 15: constant plane = total pieces remaining / 64, i.e. how close
-  the game is to the ply-64 draw cap
 
-The 15-channel layout follows the original draft; the 16th channel (index 15)
-is an extension: the network cannot otherwise tell how many plies remain, and
-the *sum* of both players' remaining pieces is perspective-invariant and exact.
-
-Actions are indexed `a = y * 25 + x * 5 + z` (125 logits, plane-major,
+Policy actions are indexed `a = y * 25 + x * 5 + z` (125 logits, plane-major,
 matching `encode.xyz_to_action`). A move is a column `(x, z)`; the piece lands
 at the current stack height, so exactly one level per column is legal at any
 time (~25 legal actions per position). Policy logits are masked to legal

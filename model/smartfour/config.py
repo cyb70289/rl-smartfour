@@ -7,7 +7,7 @@ import tomllib
 
 @dataclass(frozen=True)
 class NetworkConfig:
-    input_channels: int = 16
+    input_channels: int = 15
     blocks: int = 5
     base_channels: int = 64
     policy_channels: int = 32

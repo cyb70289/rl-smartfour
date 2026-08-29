@@ -35,11 +35,12 @@ import time
 import torch
 from .config import NetworkConfig
 from .device import resolve_device
+from .encode import N_CHANNELS
 from .network import ResNet
 
 PLANES = 25
 POLICY_FLOATS = 125
-STATE_FLOATS = 16 * PLANES  # 400
+STATE_FLOATS = N_CHANNELS * PLANES  # 375
 
 NEG_INF = float("-inf")
 
@@ -195,7 +196,7 @@ def _run_batch(batch, nets, device):
             data = torch.frombuffer(
                 bytearray(b"".join(r.payload for r in reqs)), dtype=torch.float32
             )
-            states = data.reshape(n_total, 16, 5, 5)
+            states = data.reshape(n_total, 15, 5, 5)
             mask = (states[:, 10:15] > 0.5).reshape(n_total, POLICY_FLOATS)
             with torch.no_grad():
                 x = states.to(device)

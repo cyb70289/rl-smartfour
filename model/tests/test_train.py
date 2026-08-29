@@ -39,7 +39,7 @@ def tiny_mcts(**kw):
 
 
 def tiny_net_cfg(**kw):
-    kw.setdefault("input_channels", 16)
+    kw.setdefault("input_channels", 15)
     kw.setdefault("blocks", 1)
     kw.setdefault("base_channels", 8)
     kw.setdefault("policy_channels", 4)
@@ -87,7 +87,7 @@ def test_buffer_push_and_sample_shapes():
     buf.push(samples)
     assert len(buf) == len(samples)
     s, pi, z = buf.sample(4, augment=False)
-    assert s.shape == (4, 16, 5, 5)
+    assert s.shape == (4, 15, 5, 5)
     assert pi.shape == (4, 125)
     assert z.shape == (4, 1)
 
@@ -195,7 +195,7 @@ def test_checkpoint_round_trip(tmp_path):
     t = Trainer(cfg)
     t.iteration = 7
     # Take one optimizer step so Adam state exists to round-trip.
-    s = torch.zeros(2, 16, 5, 5)
+    s = torch.zeros(2, 15, 5, 5)
     pi = torch.full((2, 125), 1 / 125)
     z = torch.ones(2, 1)
     logits, value = t.net(s)
@@ -493,6 +493,6 @@ def test_config_loads_from_toml():
     from smartfour.config import load_config
 
     cfg = load_config("config_small.toml")
-    assert cfg.network.input_channels == 16
+    assert cfg.network.input_channels == 15
     assert cfg.mcts.simulations == 400
     assert cfg.training.selfplay_games == 50

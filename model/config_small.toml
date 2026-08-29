@@ -2,7 +2,7 @@
 # reduced sizes so an iteration finishes in minutes on modest hardware.
 
 [network]
-input_channels = 16
+input_channels = 15
 blocks = 3
 base_channels = 32
 policy_channels = 16

@@ -17,7 +17,7 @@ from smartfour.network import ResNet
 
 
 def tiny_cfg(**kw):
-    kw.setdefault("input_channels", 16)
+    kw.setdefault("input_channels", 15)
     kw.setdefault("blocks", 1)
     kw.setdefault("base_channels", 8)
     kw.setdefault("policy_channels", 4)
@@ -40,7 +40,7 @@ def test_collect_shapes_and_label_range():
     assert len(states) == len(zs)
     assert 0 < len(states) <= 4 * 4
     for s in states:
-        assert s.shape == (16, 5, 5)
+        assert s.shape == (15, 5, 5)
     for z in zs:
         assert -1.0 <= z <= 1.0
     # soft labels from k=3 rollouts are multiples of 1/3
@@ -66,7 +66,7 @@ def test_parallel_collect_matches_shape_and_range():
     assert len(states) == len(zs)
     assert 0 < len(states) <= 8 * 4
     for s in states:
-        assert s.shape == (16, 5, 5)
+        assert s.shape == (15, 5, 5)
     for z in zs:
         assert -1.0 <= z <= 1.0
 

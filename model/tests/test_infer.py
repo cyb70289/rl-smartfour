@@ -14,7 +14,7 @@ def make_agent(tmp_path, seed=0, device="cpu"):
     from dataclasses import asdict
 
     torch.manual_seed(seed)
-    net_cfg = NetworkConfig(input_channels=16, blocks=1, base_channels=8,
+    net_cfg = NetworkConfig(input_channels=15, blocks=1, base_channels=8,
                             policy_channels=4, value_channels=4, value_fc=8)
     net = ResNet(net_cfg)
     path = tmp_path / "net.pt"

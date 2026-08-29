@@ -13,7 +13,7 @@ SIM = 30
 
 def tiny_net(seed=0):
     torch.manual_seed(seed)
-    return ResNet(NetworkConfig(input_channels=16, blocks=1, base_channels=8,
+    return ResNet(NetworkConfig(input_channels=15, blocks=1, base_channels=8,
                                 policy_channels=4, value_channels=4, value_fc=8))
 
 
@@ -35,7 +35,7 @@ def test_play_game_full_and_consistent():
     # Every stored position is a legal, consistent position.
     z_white = 1.0 if winner == WHITE else (-1.0 if winner == BLACK else 0.0)
     for s, pi, player, z in samples:
-        assert s.shape == (16, 5, 5)
+        assert s.shape == (15, 5, 5)
         assert abs(pi.sum().item() - 1.0) < 1e-5
         assert z in (-1.0, 0.0, 1.0)
         expected_z = z_white if player == WHITE else -z_white

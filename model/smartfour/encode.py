@@ -1,25 +1,23 @@
-"""State encoding — 16 x 5 x 5 input from the CURRENT player's perspective.
+"""State encoding — 15 x 5 x 5 input from the CURRENT player's perspective.
 
-Channels (per model.md, plus one extension):
+Channels (per model.md):
   0-4   current player's pieces, one plane per height level
   5-9   opponent player's pieces, one plane per height level
   10-14 legality for the current player: 1 at the stack top of each legal column
-  15    constant plane: total pieces remaining / 64 (plies left to the draw cap)
 
 Policy actions are indexed a = y * 25 + x * 5 + z (plane-major, 125 total).
 """
 
 import torch
 
-from .game import _HEIGHTS, BOARD_SIZE, STACK_HEIGHT, other, stack_height, WHITE
+from .game import _HEIGHTS, BOARD_SIZE, STACK_HEIGHT, WHITE
 
-N_CHANNELS = 16
-TOTAL_PIECES = 64
+N_CHANNELS = 15
 PLANES = BOARD_SIZE * BOARD_SIZE  # 25
 
 
 def encode(state) -> torch.Tensor:
-    """Encode a game state as a (16, 5, 5) float tensor."""
+    """Encode a game state as a (15, 5, 5) float tensor."""
     cur = state.current
     t = torch.zeros((N_CHANNELS, BOARD_SIZE, BOARD_SIZE), dtype=torch.float32)
     # Player planes by height: t[y][x][z] = 1 where that player occupies the cell.
@@ -39,8 +37,6 @@ def encode(state) -> torch.Tensor:
             h = _HEIGHTS[(own_col | opp_col)]
             if h < STACK_HEIGHT:
                 t[10 + h][x][z] = 1.0
-    remaining = state.pieces_left[cur] + state.pieces_left[other(cur)]
-    t[15].fill_(remaining / TOTAL_PIECES)
     return t
 
 

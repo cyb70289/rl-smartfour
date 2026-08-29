@@ -1,4 +1,4 @@
-"""Tests for smartfour.encode — 16-channel current-player-perspective encoding."""
+"""Tests for smartfour.encode — 15-channel current-player-perspective encoding."""
 
 import random
 
@@ -70,8 +70,6 @@ def test_empty_initial_state_channels():
     # Every column legal at plane 0.
     assert (t[10] == 1).all()
     assert t[11:15].sum() == 0
-    # Channel 15: total pieces remaining / 64 = 1 at the start.
-    assert (t[15] == 1.0).all()
     # Mask: exactly the 25 ground-level actions.
     assert mask.shape == (125,)
     assert mask.sum() == 25
@@ -90,8 +88,6 @@ def test_perspective_swap_after_white_move():
     assert t[10][2][3] == 0.0
     assert t[11][2][3] == 1.0
     assert t[10][0][0] == 1.0
-    # Channel 15: 63/64 remaining (one piece placed).
-    assert (t[15] == 63.0 / 64.0).all()
 
 
 def test_stacked_position_planes():
@@ -110,8 +106,6 @@ def test_stacked_position_planes():
     # Legality: column (0,0) is legal only at height 3 (top of stack).
     assert t[10][0][0] == 0.0 and t[11][0][0] == 0.0 and t[12][0][0] == 0.0
     assert t[13][0][0] == 1.0
-    # Channel 15: 60/64.
-    assert (t[15] == 60.0 / 64.0).all()
 
 
 def test_action_indexing_round_trip():

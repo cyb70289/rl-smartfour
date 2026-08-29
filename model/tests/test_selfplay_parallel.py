@@ -61,7 +61,7 @@ def test_split_games_rejects_bad_input():
 # ---------------------------------------------------------------- worker process
 
 def tiny_net_cfg(**kw):
-    kw.setdefault("input_channels", 16)
+    kw.setdefault("input_channels", 15)
     kw.setdefault("blocks", 1)
     kw.setdefault("base_channels", 8)
     kw.setdefault("policy_channels", 4)
@@ -88,7 +88,7 @@ def uniform_pi(state):
 def check_samples(samples):
     assert samples, "worker returned an empty game"
     for s, pi, player, z in samples:
-        assert s.shape == (16, 5, 5)
+        assert s.shape == (15, 5, 5)
         assert pi.shape == (125,)
         assert abs(pi.sum().item() - 1.0) < 1e-6
         assert z in (-1.0, 0.0, 1.0)
@@ -214,7 +214,7 @@ def test_collect_pushes_all_games(tmp_path):
     t._collect_selfplay(2, [FakeProc(), FakeProc()], q, fake_bar())
     assert len(t.buffer) == 2
     s, pi, z = t.buffer.sample(2, augment=False)
-    assert s.shape == (2, 16, 5, 5)
+    assert s.shape == (2, 15, 5, 5)
     assert pi.shape == (2, 125)
 
 
@@ -288,7 +288,7 @@ def test_trainer_selfplay_with_workers(tmp_path, monkeypatch):
     states, pis, zs, lens = t.buffer.state()
     assert sum(lens) == len(states) == len(t.buffer)
     for s, pi, z in zip(states, pis, zs):
-        assert s.shape == (16, 5, 5)
+        assert s.shape == (15, 5, 5)
         assert pi.shape == (125,)
         assert abs(pi.sum().item() - 1.0) < 1e-6
         assert z in (-1.0, 0.0, 1.0)

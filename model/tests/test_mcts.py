@@ -197,7 +197,7 @@ def test_real_net_policy_legal_on_stacked_state():
     from smartfour.config import NetworkConfig
 
     torch.manual_seed(9)
-    net = ResNet(NetworkConfig(input_channels=16, blocks=1, base_channels=8,
+    net = ResNet(NetworkConfig(input_channels=15, blocks=1, base_channels=8,
                                policy_channels=4, value_channels=4, value_fc=8))
     net.eval()
     s = initial_state()

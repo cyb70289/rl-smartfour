@@ -5,9 +5,9 @@
 name = "auto"  # auto | cpu | mps | cuda (--device overrides)
 
 [network]
-# Input channels: 15 per model.md (current/opponent planes + legality) plus
-# one constant channel = total pieces remaining / 64 (ply count to draw cap).
-input_channels = 16
+# Input channels: 15 per model.md — current/opponent planes per height level
+# plus one legality plane per level (stack top of each legal column).
+input_channels = 15
 blocks = 16           # residual blocks after the stem
 base_channels = 128   # stem + residual width
 policy_channels = 32  # policy head conv width

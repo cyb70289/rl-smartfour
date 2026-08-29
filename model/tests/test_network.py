@@ -10,12 +10,12 @@ from smartfour.encode import action_mask, encode
 from smartfour.game import apply_move, initial_state
 from smartfour.network import ResNet, loss_fn
 
-CONF = NetworkConfig(input_channels=16, blocks=2, base_channels=16,
+CONF = NetworkConfig(input_channels=15, blocks=2, base_channels=16,
                      policy_channels=8, value_channels=8, value_fc=16)
 
 
 def make_net(**kw):
-    kw.setdefault("input_channels", 16)
+    kw.setdefault("input_channels", 15)
     kw.setdefault("blocks", 2)
     kw.setdefault("base_channels", 16)
     kw.setdefault("policy_channels", 8)
@@ -38,7 +38,7 @@ def test_output_shapes_and_value_range():
 def test_batch_forward():
     torch.manual_seed(1)
     net = make_net()
-    batch = torch.zeros(4, 16, 5, 5)
+    batch = torch.zeros(4, 15, 5, 5)
     logits, value = net(batch)
     assert logits.shape == (4, 125)
     assert value.shape == (4, 1)
@@ -51,7 +51,7 @@ def test_deterministic_with_seed():
     b = make_net()
     for pa, pb in zip(a.parameters(), b.parameters()):
         assert torch.equal(pa, pb)
-    t = torch.randn(2, 16, 5, 5)
+    t = torch.randn(2, 15, 5, 5)
     with torch.no_grad():
         la, va = a(t)
         lb, vb = b(t)
@@ -63,7 +63,7 @@ def test_different_seeds_differ():
     a = make_net()
     torch.manual_seed(1)
     b = make_net()
-    t = torch.randn(1, 16, 5, 5)
+    t = torch.randn(1, 15, 5, 5)
     with torch.no_grad():
         assert not torch.equal(a(t)[0], b(t)[0])
 
@@ -125,7 +125,7 @@ def test_net_accepts_masked_policy_target():
 def test_forward_grad_flows():
     torch.manual_seed(7)
     net = make_net()
-    t = torch.randn(2, 16, 5, 5)
+    t = torch.randn(2, 15, 5, 5)
     logits, value = net(t)
     loss = logits.sum() + value.sum()
     loss.backward()
