@@ -12,8 +12,8 @@ export interface HudCallbacks {
 }
 
 export const EFFORT_KEY = 'smartfour.effort';
-const EFFORT_VALUES = ['0', '500', '2000'];
-const DEFAULT_EFFORT = '500';
+const EFFORT_VALUES = ['0', '1000', '2500', '5000'];
+const DEFAULT_EFFORT = '1000';
 
 function cap(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
@@ -30,6 +30,7 @@ export class Hud {
   private whiteSelect: HTMLSelectElement;
   private blackSelect: HTMLSelectElement;
   private effortRadios: NodeListOf<HTMLInputElement>;
+  private effortLabel: HTMLElement;
   private banner: HTMLDivElement;
   private errorText = '';
   private checkpoints: string[] = [];
@@ -51,6 +52,7 @@ export class Hud {
     this.whiteSelect = byId<HTMLSelectElement>(root, 'white-checkpoint');
     this.blackSelect = byId<HTMLSelectElement>(root, 'black-checkpoint');
     this.effortRadios = root.querySelectorAll<HTMLInputElement>('input[name="effort"]');
+    this.effortLabel = byId(root, 'effort-label');
 
     this.banner = document.createElement('div');
     this.banner.className = 'banner';
@@ -84,6 +86,7 @@ export class Hud {
     this.effortRadios.forEach((r) =>
       r.addEventListener('change', () => {
         this.saveEffort();
+        this.updateEffortLabel();
         this.cb.onSettingsChange({ effort: Number(this.selectedValue(this.effortRadios)) });
       }),
     );
@@ -255,6 +258,13 @@ export class Hud {
     for (const r of this.effortRadios) {
       if (r.value === value) r.checked = true;
     }
+    this.updateEffortLabel();
+  }
+
+  /** Shows the selected effort in the section title, e.g. "Think effort: 1000". */
+  private updateEffortLabel(): void {
+    const value = this.selectedValue(this.effortRadios) || DEFAULT_EFFORT;
+    this.effortLabel.textContent = `Think effort: ${value}`;
   }
 
   private saveEffort(): void {

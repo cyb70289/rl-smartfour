@@ -61,7 +61,7 @@ function buildApp(domWhite: 'human' | 'model', domBlack: 'human' | 'model'): {
   groups: Record<string, FakeEl[]>;
 } {
   const app = new FakeEl();
-  for (const id of ['status', 'revert-btn', 'play-btn', 'reset-btn', 'white-checkpoint', 'black-checkpoint']) {
+  for (const id of ['status', 'revert-btn', 'play-btn', 'reset-btn', 'white-checkpoint', 'black-checkpoint', 'effort-label']) {
     const el = new FakeEl();
     el.id = id;
     app.appendChild(el);
@@ -79,7 +79,7 @@ function buildApp(domWhite: 'human' | 'model', domBlack: 'human' | 'model'): {
     const select = app.querySelector(`#${color}-checkpoint`) as FakeEl;
     select.value = 'best1.pt';
   }
-  const effort = ['0', '500', '2000'].map((v) => radio(app, 'effort', v));
+  const effort = ['0', '1000', '2500', '5000'].map((v) => radio(app, 'effort', v));
   groups['effort'] = [...effort];
   effort[1]!.checked = true;
   return { app, radios, effort, groups };
