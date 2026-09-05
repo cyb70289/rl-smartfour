@@ -47,7 +47,7 @@ What it provides
 - **Celebration**: beating the model (human vs model games only) rains a
   short confetti overlay over the board; reverting or resetting stops it.
 - Think effort selectable as four radios — Instant (0 = policy only), Medium
-  (1000), High (2500), Ultra (5000), default Medium — applied immediately to
+  (2000), High (4000), Ultra (8000), default Medium — applied immediately to
   every model move; disabled when neither side is a model. The chosen effort
   is persisted (`localStorage`) and restored on the next launch; player slots
   always reset to their defaults.
