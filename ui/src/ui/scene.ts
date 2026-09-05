@@ -81,6 +81,9 @@ export class GameScene {
   private pieceGroup = new THREE.Group();
   private marker: THREE.Object3D | null = null;
   private beamGroup = new THREE.Group();
+  /** Body materials of the winning pieces, pulsing while the game is over
+   * (gold for white, dark gray for black); rebuilt on every sync. */
+  private pulseMats: Array<{ mat: THREE.MeshStandardMaterial; phase: number }> = [];
   private ghost: THREE.Mesh;
   private pickGroup = new THREE.Group();
   private columnBoxes: THREE.Mesh[] = [];
@@ -178,14 +181,29 @@ export class GameScene {
 
     // Pieces.
     this.pieceGroup.clear();
+    this.pulseMats = [];
+    const winSet = new Set<string>();
+    if (state.winningCells) {
+      for (const c of state.winningCells) winSet.add(`${c.x},${c.z},${c.y}`);
+    }
     for (let x = 0; x < BOARD_SIZE; x++) {
       for (let z = 0; z < BOARD_SIZE; z++) {
         for (let y = 0; y < STACK_HEIGHT; y++) {
           const player = state.grid[x]![z]![y];
           if (!player) continue;
-          const piece = makePiece(player);
+          const winning = winSet.has(`${x},${z},${y}`);
+          const piece = makePiece(player, winning);
           piece.position.set(wx(x), wy(y), wz(z));
           this.pieceGroup.add(piece);
+          if (winning) {
+            // The body is the first child; every piece gets its own material.
+            // White pieces flash gold; black pieces only shimmer dark so they
+            // stay dark.
+            const mat = (piece.children[0] as THREE.Mesh).material as THREE.MeshStandardMaterial;
+            mat.emissive.set(player === 'white' ? 0xffc107 : 0x3d3d3d);
+            // Offset phases so the pulse travels along the winning line.
+            this.pulseMats.push({ mat, phase: this.pulseMats.length * 0.45 });
+          }
         }
       }
     }
@@ -396,12 +414,21 @@ export class GameScene {
 
   private loop = (): void => {
     this.rafId = requestAnimationFrame(this.loop);
+    // Winning pieces breathe (~1.2s cycle), phase-shifted along the line:
+    // gold on white, a faint dark shimmer on black.
+    if (this.pulseMats.length > 0) {
+      const t = performance.now() / 1000;
+      for (const { mat, phase } of this.pulseMats) {
+        const k = 0.5 + 0.5 * Math.sin(((t * Math.PI * 2) / 1.2) + phase);
+        mat.emissiveIntensity = 0.25 + 1.15 * k;
+      }
+    }
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   };
 }
 
-function makePiece(player: Player): THREE.Group {
+function makePiece(player: Player, winning = false): THREE.Group {
   const g = new THREE.Group();
   const body = new THREE.Mesh(
     new THREE.CylinderGeometry(PIECE_R, PIECE_R * 0.84, PIECE_H, 24),

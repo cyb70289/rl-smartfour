@@ -14,8 +14,9 @@ What it provides
   camera position/zoom/angle is remembered and restored on the next load.
 - Bucket-shaped pieces stacked bottom-up, white first; the top bar shows the
   current player and their remaining pieces.
-- Last move highlighted; winning line highlighted with winner shown; draw
-  shown when all 64 pieces are placed without a winner.
+- Last move highlighted; winning line highlighted with winner shown (a gold
+  beam joins the four winning pieces, which pulse gold); draw shown when all
+  64 pieces are placed without a winner.
 - Two independent player slots — **White player** and **Black player** — each
   either *Human* or *Model* (radio). A model slot has a dropdown of every
   `best{n}.pt` checkpoint in `model/checkpoints` (largest n = strongest,
