@@ -79,7 +79,7 @@ function buildApp(domWhite: 'human' | 'model', domBlack: 'human' | 'model'): {
     const select = app.querySelector(`#${color}-checkpoint`) as FakeEl;
     select.value = 'best1.pt';
   }
-  const effort = ['0', '1000', '2500', '5000'].map((v) => radio(app, 'effort', v));
+  const effort = ['0', '2000', '4000', '8000'].map((v) => radio(app, 'effort', v));
   groups['effort'] = [...effort];
   effort[1]!.checked = true;
   return { app, radios, effort, groups };

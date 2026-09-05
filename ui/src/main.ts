@@ -38,7 +38,7 @@ async function startOpenbookViewer(): Promise<void> {
 
 function startGame(): void {
   const EFFORT_KEY = 'smartfour.effort';
-  const EFFORT_VALUES = [0, 1000, 2500, 5000];
+  const EFFORT_VALUES = [0, 2000, 4000, 8000];
   const DEFAULT_EFFORT = 1000;
 
   function loadEffort(): number {
