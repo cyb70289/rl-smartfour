@@ -1,9 +1,11 @@
-# Smart-Four
+# AlphaZero Model to Play SmartFour Game
 
 Advanced tic-tac-toe on a 5×5×5 board: two players place pieces on a 5×5 grid
 and stack up to five high; first to line up four own pieces in 3D space wins
 (horizontal planes, vertical stacks, and rising diagonals). Full rules in
 [`docs/game.md`](docs/game.md).
+
+![SmartFour](assets/smartfour.png)
 
 ## Layout
 
@@ -50,10 +52,11 @@ npm run build
 npm run preview -- --host 0.0.0.0 --port 8032
 ```
 
+Play the game in a web browser, e.g., http://127.0.0.1:8032/.
 White and black players can be human or a model.
 
 ## CREDIT
 
 - `DeepSeek-v4-Flash-0731` for design and coding.
 - `GLM-5.3` for performance improvement.
-- `oh-my-pi` harness, `grill me` skill.
+- `pi` codig agent, `grill me` skill.
