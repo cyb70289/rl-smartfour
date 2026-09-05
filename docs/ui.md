@@ -20,10 +20,11 @@ What it provides
   either *Human* or *Model* (radio). A model slot has a dropdown of every
   `best{n}.pt` checkpoint in `model/checkpoints` (largest n = strongest,
   listed largest first, and that largest one is selected by default).
-  Defaults: white human, black model. Changing a player slot or its
-  checkpoint keeps the current board: outside running auto play the change
-  takes effect immediately (a model owing a move thinks at once), in auto
-  play it waits for Play.
+  Defaults: white human, black model. With no checkpoints available the
+  Model radios are disabled and the game is human vs human. Changing a player
+  slot or its checkpoint keeps the current board: outside running auto play
+  the change takes effect immediately (a model owing a move thinks at once),
+  in auto play it waits for Play.
 - Game modes fall out of the slots:
   - both human — classic hot-seat play;
   - one model — play against the model (either color);
@@ -41,11 +42,11 @@ What it provides
 - **Reset** (always enabled) clears the board and starts a fresh game with
   the selected players, stopping any auto play or in-flight think; player
   selections and effort are kept. It replaces the old New Game button.
-- Think effort selectable as three radios — Entry (0 = policy only), Medium
-  (500), High (2000), default Medium — applied immediately to every model
-  move; disabled when neither side is a model. The chosen effort is persisted
-  (`localStorage`) and restored on the next launch; player slots always reset
-  to their defaults.
+- Think effort selectable as four radios — Instant (0 = policy only), Medium
+  (1000), High (2500), Ultra (5000), default Medium — applied immediately to
+  every model move; disabled when neither side is a model. The chosen effort
+  is persisted (`localStorage`) and restored on the next launch; player slots
+  always reset to their defaults.
 
 Architecture
 ------------

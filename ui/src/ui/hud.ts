@@ -178,7 +178,15 @@ export class Hud {
     // The boot config starts before the list arrives; if the user has not
     // touched the panel, adopt the real default (biggest best{n}.pt) so the
     // running game matches the dropdown.
-    if (!this.userTouched && this.checkpoints.length > 0) {
+    if (this.checkpoints.length === 0) {
+      // No model available: force human vs human so the running game matches
+      // the (now disabled) panel. The boot config defaults to a model black
+      // player, which could never make a move.
+      for (const r of [...this.whiteKindRadios, ...this.blackKindRadios]) {
+        r.checked = r.value === 'human';
+      }
+      this.cb.onPlayersChange(this.pendingConfig());
+    } else if (!this.userTouched) {
       this.cb.onPlayersChange(this.pendingConfig());
     }
   }
@@ -239,11 +247,13 @@ export class Hud {
     this.effortRadios.forEach((r) => {
       r.disabled = (!whiteModel && !blackModel) || lockPlayerControls;
     });
+    // Without any checkpoint the Model option is unavailable: force human vs
+    // human by disabling the Model radios (Human stays selectable/checked).
     this.whiteKindRadios.forEach((r) => {
-      r.disabled = lockPlayerControls;
+      r.disabled = noModels || lockPlayerControls;
     });
     this.blackKindRadios.forEach((r) => {
-      r.disabled = lockPlayerControls;
+      r.disabled = noModels || lockPlayerControls;
     });
   }
 
