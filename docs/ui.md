@@ -13,7 +13,8 @@ What it provides
   The default view frames the board in the upper part of the window; the last
   camera position/zoom/angle is remembered and restored on the next load.
 - Bucket-shaped pieces stacked bottom-up, white first; the top bar shows the
-  current player and their remaining pieces.
+  current player and their remaining pieces. While a machine owns the move
+  the status text blinks.
 - Last move highlighted; winning line highlighted with winner shown (a gold
   beam joins the four winning pieces, which pulse gold); draw shown when all
   64 pieces are placed without a winner.
@@ -43,6 +44,8 @@ What it provides
 - **Reset** (always enabled) clears the board and starts a fresh game with
   the selected players, stopping any auto play or in-flight think; player
   selections and effort are kept. It replaces the old New Game button.
+- **Celebration**: beating the model (human vs model games only) rains a
+  short confetti overlay over the board; reverting or resetting stops it.
 - Think effort selectable as four radios — Instant (0 = policy only), Medium
   (1000), High (2500), Ultra (5000), default Medium — applied immediately to
   every model move; disabled when neither side is a model. The chosen effort
@@ -77,7 +80,9 @@ Architecture
   - `src/ui/hud.ts` — top-bar status (with remaining pieces) and DOM side
     panel: action buttons (renamed per mode), white/black player rows with
     checkpoint dropdowns, effort radios, effort persistence, checkpoint-list
-    loading.
+    loading, human-win celebration trigger.
+- `src/ui/celebrate.ts` — self-disposing confetti overlay (2D canvas over
+    the scene container) for a human win against the model.
 
 Design notes
 ------------

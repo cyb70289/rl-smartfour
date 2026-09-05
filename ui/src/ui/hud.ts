@@ -1,6 +1,7 @@
 import type { GameConfig } from '../game/engine';
-import type { GameState, Mode, PlayerSlot, ThinkSettings } from '../game/types';
+import type { GameState, Mode, Player, PlayerSlot, ThinkSettings } from '../game/types';
 import { modeOf, humanColorOf } from '../game/types';
+import { celebrate } from './celebrate';
 
 export interface HudCallbacks {
   onRevert(): void;
@@ -40,9 +41,14 @@ export class Hud {
   /** True while model-vs-model auto play is running: player selection and
    * think effort are locked. */
   private autoplayRunning = false;
+  /** The color whose win already fired the celebration overlay; null when no
+   * celebration is due or the board left the winning state. */
+  private celebrated: Player | null = null;
+  private sceneContainer: HTMLElement;
 
 
   constructor(root: HTMLElement, private cb: HudCallbacks) {
+    this.sceneContainer = document.getElementById('scene-container')!;
     this.statusEl = byId(root, 'status');
     this.revertBtn = byId<HTMLButtonElement>(root, 'revert-btn');
     this.playBtn = byId<HTMLButtonElement>(root, 'play-btn');
@@ -57,7 +63,7 @@ export class Hud {
     this.banner = document.createElement('div');
     this.banner.className = 'banner';
     this.banner.style.display = 'none';
-    const sceneContainer = document.getElementById('scene-container');
+    const sceneContainer = this.sceneContainer;
     // In auto play the action buttons become Play/Pause and Step; the click
     // target depends on the current mode, so the revert button dispatches.
     this.revertBtn.addEventListener('click', () => {
@@ -139,6 +145,22 @@ export class Hud {
       this.revertBtn.disabled = state.machineThinking || (state.winner === null && !state.revertAvailable);
     }
     this.resetBtn.disabled = false;
+
+    // Celebration: the human beat the model in a human-vs-model game. Fires
+    // once per win; reverting or resetting clears the winner and re-arms it.
+    if (
+      state.winner &&
+      state.winner !== 'draw' &&
+      this.mode === 'machine' &&
+      state.winner === humanColorOf(state)
+    ) {
+      if (this.celebrated !== state.winner) {
+        this.celebrated = state.winner;
+        celebrate(this.sceneContainer);
+      }
+    } else if (state.winner === null) {
+      this.celebrated = null;
+    }
 
     // Re-apply slot/select/radio enablement: locking follows mode+running,
     // which can change without any panel input.

@@ -43,7 +43,13 @@ html, body {
 #topbar h1 { font-size: 18px; margin: 0; letter-spacing: 0.5px; }
 
 .status { font-size: 15px; font-weight: 600; }
-.status.thinking { color: var(--accent); }
+/* Machine thinking: hard blink, 0.5s on / 0.5s off (like a turn signal). */
+.status.thinking { color: var(--accent); animation: think-blink 1s steps(1, end) infinite; }
+@keyframes think-blink {
+  0% { opacity: 1; }
+  50% { opacity: 0; }
+  100% { opacity: 1; }
+}
 .status.win-white { color: #ffffff; }
 .status.win-black { color: #9aa0b0; }
 .status.draw { color: var(--muted); }
